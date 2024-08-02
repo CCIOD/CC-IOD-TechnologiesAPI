@@ -35,7 +35,7 @@ if (isProduction) {
 const uploadsPath = path.resolve(__dirname, "../uploads");
 app.use("/uploads", express.static(uploadsPath));
 
-// ------- Routes -----------
+// -------- Routes ------------
 app.use("/auth", authRoutes);
 app.use("/prospects", prospectsRoutes);
 app.use("/clients", clientsRoutes);
