@@ -15,7 +15,7 @@ app.use(express.json());
 const isProduction = process.env.NODE_ENV === "production";
 
 if (isProduction) {
-  const allowedOrigins = ["https://cciodtech.com", "https://dev.cciodtech.com"];
+  const allowedOrigins = ["https://cciodtechnologies.com/"];
   const corsOptions: cors.CorsOptions = {
     origin: (origin, callback) => {
       if (allowedOrigins.indexOf(origin!) !== -1 || !origin) {
