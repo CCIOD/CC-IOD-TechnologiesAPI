@@ -15,22 +15,24 @@ app.use(express.json());
 const isProduction = process.env.NODE_ENV === "production";
 
 if (isProduction) {
-  const allowedOrigins = [
-    "https://cciodtechnologies.com/",
-    "https://dev.cciodtech.com",
-  ];
-  const corsOptions: cors.CorsOptions = {
-    origin: (origin, callback) => {
-      if (allowedOrigins.indexOf(origin!) !== -1 || !origin) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    optionsSuccessStatus: 200,
-  };
+  // const allowedOrigins = [
+  //   "https://cciodtechnologies.com/",
+  //   "https://dev.cciodtech.com",
+  // ];
 
-  app.use(cors(corsOptions));
+  // const corsOptions: cors.CorsOptions = {
+  //   origin: (origin, callback) => {
+  //     if (allowedOrigins.indexOf(origin!) !== -1 || !origin) {
+  //       callback(null, true);
+  //     } else {
+  //       callback(new Error("Not allowed by CORS"));
+  //     }
+  //   },
+  //   optionsSuccessStatus: 200,
+  // };
+
+  // app.use(cors(corsOptions));
+  app.use(cors());
 } else {
   app.use(cors());
 }
