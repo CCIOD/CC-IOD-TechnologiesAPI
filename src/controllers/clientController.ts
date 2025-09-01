@@ -9,17 +9,33 @@ export const getAllClients = async (
   next: NextFunction
 ): Promise<Response | void> => {
   try {
-    const query =
-      "SELECT client_id as id, contact_numbers, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, observations, prospect_id, signer_name, status, contract FROM CLIENTS ORDER BY client_id";
-    const result = await pool.query(query);
-    if (!result.rowCount)
+    const clientQuery =
+      "SELECT client_id as id, contact_numbers, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day FROM CLIENTS ORDER BY client_id";
+    const clientResult = await pool.query(clientQuery);
+
+    if (!clientResult.rowCount)
       return res
         .status(404)
         .json({ message: "No se encontró ningún cliente." });
+
+    const clients = clientResult.rows;
+
+    // Obtener observaciones para cada cliente
+    const observationQueries = clients.map(async (client: any) => {
+      const observationResult = await pool.query({
+        text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1",
+        values: [client.id],
+      });
+      client.observations = observationResult.rows;
+      return client;
+    });
+
+    const enrichedClients = await Promise.all(observationQueries);
+
     return res.status(201).json({
       success: true,
       message: "Información de todos los clientes",
-      data: result.rows,
+      data: enrichedClients,
     });
   } catch (error) {
     next(error);
@@ -41,14 +57,20 @@ export const createClient = async (
     signer_name,
     contact_numbers,
     hearing_date,
+    contract_date,
+    contract_document,
+    contract_duration,
+    payment_day,
     observations,
     status,
     prospect_id,
   } = req.body;
   try {
-    const obserOptional = observations ? observations : "";
     const invFileOptional = investigation_file_number
       ? investigation_file_number
+      : null;
+    const contractDateOptional = contract_date 
+      ? new Date(contract_date).toISOString().split('T')[0] 
       : null;
     const numbers = JSON.stringify(contact_numbers);
 
@@ -63,10 +85,12 @@ export const createClient = async (
         message: "No es posible agregar un cliente sin antes ser aprobado.",
       });
     }
-    const query = {
-      text: "WITH inserted AS (INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, contact_numbers, hearing_date, observations, status, prospect_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *) SELECT client_id as id, contact_numbers, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, observations, prospect_id, signer_name, status, contract FROM inserted",
+
+    // Insertar cliente
+    const clientQuery = {
+      text: "INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, contact_numbers, hearing_date, contract_date, contract_document, contract_duration, payment_day, status, prospect_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING client_id",
       values: [
-        contract_number,
+        contract_number || null,
         defendant_name,
         criminal_case,
         invFileOptional,
@@ -75,17 +99,53 @@ export const createClient = async (
         lawyer_name,
         signer_name,
         numbers,
-        hearing_date,
-        obserOptional,
+        new Date(hearing_date).toISOString().split('T')[0],
+        contractDateOptional,
+        contract_document || null,
+        contract_duration || null,
+        payment_day || null,
         status,
         prospect_id,
       ],
     };
-    const result = await pool.query(query);
+    const clientResult = await pool.query(clientQuery);
+    const clientId = clientResult.rows[0].client_id;
+
+    // Insertar observaciones
+    if (observations && Array.isArray(observations)) {
+      const observationQueries = observations.map((obs: any) => {
+        const formattedObsDate = new Date(obs.date).toISOString().split('T')[0];
+        return pool.query({
+          text: "INSERT INTO CLIENT_OBSERVATIONS(client_id, observation_date, observation) VALUES($1, $2, $3)",
+          values: [clientId, formattedObsDate, obs.observation],
+        });
+      });
+      await Promise.all(observationQueries);
+    }
+
     return res.status(201).json({
       success: true,
-      message: "El prospecto se ha creado correctamente",
-      data: result.rows[0],
+      message: "El cliente se ha creado correctamente",
+      data: {
+        id: clientId,
+        contract_number,
+        defendant_name,
+        criminal_case,
+        investigation_file_number: invFileOptional,
+        judge_name,
+        court_name,
+        lawyer_name,
+        signer_name,
+        contact_numbers,
+        hearing_date,
+        contract_date: contractDateOptional,
+        contract_document,
+        contract_duration,
+        payment_day,
+        status,
+        prospect_id,
+        observations,
+      },
     });
   } catch (error: any) {
     next(error);
@@ -108,6 +168,10 @@ export const updateClient = async (
     signer_name,
     contact_numbers,
     hearing_date,
+    contract_date,
+    contract_document,
+    contract_duration,
+    payment_day,
     observations,
     status,
     prospect_id,
@@ -122,15 +186,19 @@ export const updateClient = async (
         ? status
         : "Pendiente de colocación"
       : status;
-    const obserOptional = observations ? observations : "";
     const invFileOptional = investigation_file_number
       ? investigation_file_number
       : null;
+    const contractDateOptional = contract_date 
+      ? new Date(contract_date).toISOString().split('T')[0] 
+      : null;
     const numbers = JSON.stringify(contact_numbers);
-    const query = {
-      text: "WITH updated AS (UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, contact_numbers=$9, hearing_date=$10, observations=$11, status=$12 WHERE client_id = $13 RETURNING contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, contact_numbers, hearing_date, observations, status, prospect_id, contract, client_id) SELECT client_id as id, contact_numbers, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, observations, prospect_id, signer_name, status, contract FROM updated",
+
+    // Actualizar cliente
+    const clientQuery = {
+      text: "UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, contact_numbers=$9, hearing_date=$10, contract_date=$11, contract_document=$12, contract_duration=$13, payment_day=$14, status=$15 WHERE client_id = $16 RETURNING *",
       values: [
-        contract_number,
+        contract_number || null,
         defendant_name,
         criminal_case,
         invFileOptional,
@@ -139,21 +207,45 @@ export const updateClient = async (
         lawyer_name,
         signer_name,
         numbers,
-        hearing_date,
-        obserOptional,
+        new Date(hearing_date).toISOString().split('T')[0],
+        contractDateOptional,
+        contract_document || null,
+        contract_duration || null,
+        payment_day || null,
         newStatus,
         client_id,
       ],
     };
-    const result = await pool.query(query);
-    if (!result.rowCount)
+    const clientResult = await pool.query(clientQuery);
+
+    if (!clientResult.rowCount)
       return res
         .status(404)
-        .json({ message: "No se encontró ningún prospecto." });
+        .json({ message: "No se encontró ningún cliente." });
+
+    // Actualizar observaciones
+    if (observations && Array.isArray(observations)) {
+      // Eliminar observaciones existentes
+      await pool.query({
+        text: "DELETE FROM CLIENT_OBSERVATIONS WHERE client_id = $1",
+        values: [client_id],
+      });
+
+      // Insertar nuevas observaciones
+      const observationQueries = observations.map((obs: any) => {
+        const formattedObsDate = new Date(obs.date).toISOString().split('T')[0];
+        return pool.query({
+          text: "INSERT INTO CLIENT_OBSERVATIONS(client_id, observation_date, observation) VALUES($1, $2, $3)",
+          values: [client_id, formattedObsDate, obs.observation],
+        });
+      });
+      await Promise.all(observationQueries);
+    }
+
     return res.status(201).json({
       success: true,
-      message: "El prospecto se ha modificado correctamente",
-      data: result.rows[0],
+      message: "El cliente se ha modificado correctamente",
+      data: clientResult.rows[0],
     });
   } catch (error) {
     next(error);

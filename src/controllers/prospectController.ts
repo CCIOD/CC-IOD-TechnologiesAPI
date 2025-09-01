@@ -8,17 +8,33 @@ export const getAllProspects = async (
   next: NextFunction
 ): Promise<Response | void> => {
   try {
-    const query =
-      "SELECT prospect_id as id, A.name, email, phone, date, observations, status, A.relationship_id, B.name as relationship_name FROM PROSPECTS A INNER JOIN RELATIONSHIPS B ON A.relationship_id = B.relationship_id ORDER BY prospect_id";
-    const result = await pool.query(query);
-    if (!result.rowCount)
+    const prospectQuery =
+      "SELECT prospect_id as id, name, email, phone, date, status, relationship_id FROM PROSPECTS ORDER BY prospect_id";
+    const prospectResult = await pool.query(prospectQuery);
+
+    if (!prospectResult.rowCount)
       return res
         .status(404)
         .json({ message: "No se encontró ningún prospecto." });
+
+    const prospects = prospectResult.rows;
+
+    // Obtener observaciones para cada prospecto
+    const observationQueries = prospects.map(async (prospect: any) => {
+      const observationResult = await pool.query({
+        text: "SELECT observation_date as date, observation FROM PROSPECT_OBSERVATIONS WHERE prospect_id = $1",
+        values: [prospect.id],
+      });
+      prospect.observations = observationResult.rows;
+      return prospect;
+    });
+
+    const enrichedProspects = await Promise.all(observationQueries);
+
     return res.status(201).json({
       success: true,
       message: "Información de todos los prospectos",
-      data: result.rows,
+      data: enrichedProspects,
     });
   } catch (error) {
     next(error);
@@ -33,26 +49,40 @@ export const createProspect = async (
   const { name, email, phone, relationship_id, status, date, observations } =
     req.body;
   try {
-    const optionalData = observations ? observations : "";
     const lowerEmail = lowercase(email);
 
-    const query = {
-      text: "WITH inserted AS (INSERT INTO PROSPECTS(name, email, phone, date, relationship_id, status, observations) VALUES($1, $2, $3, $4, $5, $6, $7) RETURNING *) SELECT prospect_id as id, A.name, email, phone, date, observations, status, A.relationship_id, B.name as relationship_name FROM inserted A INNER JOIN RELATIONSHIPS B ON A.relationship_id = B.relationship_id",
-      values: [
-        name,
-        lowerEmail,
-        phone,
-        date,
-        relationship_id,
-        status,
-        optionalData,
-      ],
+    // Insertar prospecto
+    const prospectQuery = {
+      text: "INSERT INTO PROSPECTS(name, email, phone, date, relationship_id, status) VALUES($1, $2, $3, $4, $5, $6) RETURNING prospect_id",
+      values: [name, lowerEmail, phone, date, relationship_id, status],
     };
-    const result = await pool.query(query);
+    const prospectResult = await pool.query(prospectQuery);
+    const prospectId = prospectResult.rows[0].prospect_id;
+
+    // Insertar observaciones
+    if (observations && Array.isArray(observations)) {
+      const observationQueries = observations.map((obs: any) => {
+        return pool.query({
+          text: "INSERT INTO PROSPECT_OBSERVATIONS(prospect_id, observation_date, observation) VALUES($1, $2, $3)",
+          values: [prospectId, obs.date, obs.observation],
+        });
+      });
+      await Promise.all(observationQueries);
+    }
+
     return res.status(201).json({
       success: true,
       message: "El prospecto se ha creado correctamente",
-      data: result.rows[0],
+      data: {
+        id: prospectId,
+        name,
+        email,
+        phone,
+        relationship_id,
+        status,
+        date,
+        observations,
+      },
     });
   } catch (error: any) {
     next(error);
@@ -68,34 +98,41 @@ export const updateProspect = async (
     req.body;
   try {
     const lowerEmail = lowercase(email);
-    const prospect = await pool.query(
-      "SELECT prospect_id FROM CLIENTS WHERE prospect_id = $1",
-      [prospect_id]
-    );
-    const newStatus = prospect.rowCount ? "Aprobado" : status;
-    const optionalData = observations ? observations : "";
-    const query = {
-      text: "WITH updated AS (UPDATE PROSPECTS SET name=$1, email=$2, phone=$3, date=$4, relationship_id=$5, status=$6, observations=$7 WHERE prospect_id = $8 RETURNING *) SELECT prospect_id as id, A.name, email, phone, date, observations, status, A.relationship_id, B.name as relationship_name FROM updated A INNER JOIN RELATIONSHIPS B ON A.relationship_id = B.relationship_id",
-      values: [
-        name,
-        lowerEmail,
-        phone,
-        date,
-        relationship_id,
-        newStatus,
-        optionalData,
-        prospect_id,
-      ],
+
+    // Actualizar prospecto
+    const prospectQuery = {
+      text: "UPDATE PROSPECTS SET name=$1, email=$2, phone=$3, date=$4, relationship_id=$5, status=$6 WHERE prospect_id = $7 RETURNING *",
+      values: [name, lowerEmail, phone, date, relationship_id, status, prospect_id],
     };
-    const result = await pool.query(query);
-    if (!result.rowCount)
+    const prospectResult = await pool.query(prospectQuery);
+
+    if (!prospectResult.rowCount)
       return res
         .status(404)
         .json({ message: "No se encontró ningún prospecto." });
+
+    // Actualizar observaciones
+    if (observations && Array.isArray(observations)) {
+      // Eliminar observaciones existentes
+      await pool.query({
+        text: "DELETE FROM PROSPECT_OBSERVATIONS WHERE prospect_id = $1",
+        values: [prospect_id],
+      });
+
+      // Insertar nuevas observaciones
+      const observationQueries = observations.map((obs: any) => {
+        return pool.query({
+          text: "INSERT INTO PROSPECT_OBSERVATIONS(prospect_id, observation_date, observation) VALUES($1, $2, $3)",
+          values: [prospect_id, obs.date, obs.observation],
+        });
+      });
+      await Promise.all(observationQueries);
+    }
+
     return res.status(201).json({
       success: true,
       message: "El prospecto se ha modificado correctamente",
-      data: result.rows[0],
+      data: prospectResult.rows[0],
     });
   } catch (error: any) {
     next(error);

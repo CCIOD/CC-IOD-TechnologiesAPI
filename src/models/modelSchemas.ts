@@ -25,6 +25,11 @@ const relationship_id = {
   }),
 };
 
+const observationSchema = Joi.object({
+  date: dateValidation("fecha de la observación"),
+  observation: stringValidation("observación"),
+});
+
 export const prospectSchema = Joi.object({
   ...name,
   ...email,
@@ -35,11 +40,11 @@ export const prospectSchema = Joi.object({
     field: "estado",
   }),
   date: dateValidation(),
-  ...observationsValidation,
+  observations: Joi.array().items(observationSchema).optional(),
 });
 
 export const clientSchema = Joi.object({
-  contract_number: numberPositiveValidation("número de contrato"),
+  contract_number: Joi.string().optional().allow('', null),
   defendant_name: stringValidation("El nombre del imputado"),
   criminal_case: stringValidation("La causa penal"),
   investigation_file_number: numberPositiveValidation(
@@ -52,6 +57,15 @@ export const clientSchema = Joi.object({
   signer_name: stringValidation("El nombre de quién firma el contrato"),
   ...contact_numbers,
   hearing_date: dateValidation("fecha de audiencia"),
+  contract_date: dateValidation("fecha del contrato").optional(),
+  contract_document: Joi.string().optional().allow('', null),
+  contract_duration: Joi.string().optional().allow('', null),
+  payment_day: Joi.number().integer().min(1).max(31).optional().messages({
+    'number.base': 'El día de pago debe ser un número',
+    'number.integer': 'El día de pago debe ser un número entero',
+    'number.min': 'El día de pago debe ser entre 1 y 31',
+    'number.max': 'El día de pago debe ser entre 1 y 31',
+  }),
   status: statusValidation({
     allowedValues: [
       "Pendiente de aprobación",
@@ -61,7 +75,7 @@ export const clientSchema = Joi.object({
     ],
     field: "estado",
   }),
-  ...observationsValidation,
+  observations: Joi.array().items(observationSchema).optional(),
   prospect_id: fieldIdValidation({
     field: "prospecto",
     req: "Debe haber un prospecto a la cuál definir como cliente.",

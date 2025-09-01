@@ -60,7 +60,17 @@ export const login = async (
       text: "SELECT user_id, name, email, role_id as role, password, role_id FROM USERS WHERE email = $1",
       values: [lowerEmail],
     };
-    const result = await pool.query(query);
+    
+    let result;
+    try {
+      result = await pool.query(query);
+    } catch (dbError) {
+      console.error('Error executing database query:', dbError);
+      return res.status(500).json({ 
+        message: "Error interno del servidor al consultar la base de datos"  
+      });
+    }
+    
     const user = result.rows[0];
     if (!user)
       return res.status(404).json({ message: "Usuario no encontrado" });
