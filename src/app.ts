@@ -6,6 +6,8 @@ import clientsRoutes from "./routes/clientsRoutes";
 import carriersRoutes from "./routes/carriersRoutes";
 import operationsRoutes from "./routes/operationsRoutes";
 import usersRoutes from "./routes/usersRoutes";
+import auditRoutes from "./routes/auditRoutes";
+import carrierActsRoutes from "./routes/carrierActsRoutes";
 import cors from "cors";
 import path from "path";
 
@@ -35,5 +37,7 @@ app.use("/clients", clientsRoutes);
 app.use("/carriers", carriersRoutes);
 app.use("/operations", operationsRoutes);
 app.use("/users", usersRoutes);
+app.use("/audit", auditRoutes);
+app.use("/carrier-acts", carrierActsRoutes);
 
 export default app;

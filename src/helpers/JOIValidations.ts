@@ -76,12 +76,12 @@ export const stringValidation = (str: string = 'El nombre') => {
 };
 export const dateValidation = (date: string = 'fecha') => {
   return Joi.date()
-    .format(['YYYY-MM-DD', 'YYYY/MM/DD'])
+    .iso()
     .required()
     .messages({
       'any.required': `La ${date} es obligatorio`,
       'date.base': `La ${date} debe ser una fecha válida.`,
-      'date.format': `El formato de la ${date} debe ser YYYY-MM-DD.`,
+      'date.isoDate': `El formato de la ${date} debe ser válido (YYYY-MM-DD o ISO 8601).`,
     });
 };
 export const numberPositiveValidation = (number: string = 'número', isNull: boolean = false) => {
@@ -137,3 +137,58 @@ export const passwordValidation = {
         'La contraseña debe contener un dígito del 1 al 9, una letra minúscula, una letra mayúscula, un carácter especial, sin espacios y debe tener mínimo 8 caracteres.',
     }),
 };
+
+// Validaciones adicionales para clientes
+export const contractNumberValidation = Joi.string()
+  .required()
+  .messages({
+    'string.base': 'El número de contrato debe ser texto',
+    'string.empty': 'El número de contrato no puede estar vacío',
+    'any.required': 'El número de contrato es obligatorio',
+  });
+
+export const contactWithDetailsValidation = Joi.array()
+  .items(
+    Joi.object({
+      phone: phoneValidation,
+      name: stringValidation("nombre del contacto"),
+      relationship_id: fieldIdValidation({
+        field: "parentesco",
+        allowedValues: [1, 2],
+        allowedMsg: "Familiar o Abogado",
+      }),
+    })
+  )
+  .min(1)
+  .required()
+  .messages({
+    'array.base': 'Los contactos deben estar en un arreglo',
+    'any.required': 'Los contactos son requeridos.',
+    'array.min': 'Debe haber al menos un contacto.',
+  });
+
+export const contractDurationValidation = Joi.number()
+  .integer()
+  .positive()
+  .max(60)
+  .required()
+  .messages({
+    'number.base': 'La duración del contrato debe ser un número',
+    'number.integer': 'La duración del contrato debe ser un número entero',
+    'number.positive': 'La duración del contrato debe ser positiva',
+    'number.max': 'La duración del contrato no puede exceder 60 meses',
+    'any.required': 'La duración del contrato es obligatoria',
+  });
+
+export const paymentDayValidation = Joi.number()
+  .integer()
+  .min(1)
+  .max(31)
+  .required()
+  .messages({
+    'number.base': 'El día de pago debe ser un número',
+    'number.integer': 'El día de pago debe ser un número entero',
+    'number.min': 'El día de pago debe ser entre 1 y 31',
+    'number.max': 'El día de pago debe ser entre 1 y 31',
+    'any.required': 'El día de pago es obligatorio',
+  });

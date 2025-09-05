@@ -7,17 +7,94 @@ export const getAllCarriers = async (
   next: NextFunction
 ): Promise<Response | void> => {
   try {
-    const query =
-      "SELECT carrier_id as id, residence_area, placement_date, placement_time, electronic_bracelet, beacon, wireless_charger, information_emails, A.contact_numbers, house_arrest, installer_name, A.observations, A.client_id, A.relationship_id, B.defendant_name as name, C.name as relationship_name FROM CARRIERS A INNER JOIN CLIENTS B ON A.client_id = B.client_id INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id ORDER BY carrier_id";
+    const query = `
+      SELECT 
+        carrier_id as id, 
+        residence_area, 
+        placement_date, 
+        placement_time, 
+        electronic_bracelet, 
+        beacon, 
+        wireless_charger, 
+        information_emails, 
+        A.contact_numbers as carrier_contact_numbers, 
+        house_arrest, 
+        installer_name, 
+        A.observations as carrier_observations, 
+        A.client_id, 
+        A.relationship_id, 
+        B.defendant_name as name,
+        B.contract_number,
+        B.criminal_case,
+        B.investigation_file_number,
+        B.judge_name,
+        B.court_name,
+        B.lawyer_name,
+        B.signer_name,
+        B.hearing_date,
+        B.contract_date,
+        B.contract_document,
+        B.contract_duration,
+        B.payment_day,
+        B.status as client_status,
+        B.contract,
+        C.name as relationship_name 
+      FROM CARRIERS A 
+      INNER JOIN CLIENTS B ON A.client_id = B.client_id 
+      INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id 
+      ORDER BY carrier_id`;
+    
     const result = await pool.query(query);
     if (!result.rowCount)
       return res
         .status(404)
         .json({ message: "No se encontró ningún portador." });
+
+    // Obtener contactos y observaciones para cada cliente asociado
+    const enrichedCarriers = await Promise.all(
+      result.rows.map(async (carrier: any) => {
+        // Obtener contactos del cliente
+        const contactResult = await pool.query({
+          text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+                 FROM CLIENT_CONTACTS cc 
+                 LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
+                 WHERE cc.client_id = $1`,
+          values: [carrier.client_id],
+        });
+        carrier.client_contacts = contactResult.rows;
+
+        // Obtener observaciones del cliente
+        const observationResult = await pool.query({
+          text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date DESC",
+          values: [carrier.client_id],
+        });
+        carrier.client_observations = observationResult.rows;
+
+        // Obtener actas del portador
+        const actsResult = await pool.query({
+          text: `SELECT 
+                   act_id,
+                   act_document_url,
+                   act_title,
+                   act_description,
+                   uploaded_by_name,
+                   upload_date,
+                   file_name
+                 FROM CARRIER_ACTS 
+                 WHERE carrier_id = $1 
+                 ORDER BY upload_date DESC`,
+          values: [carrier.carrier_id || carrier.id],
+        });
+        carrier.carrier_acts = actsResult.rows;
+
+        return carrier;
+      })
+    );
+
     return res.status(200).json({
       success: true,
       message: "Información de todos los portadores",
-      data: result.rows,
+      data: enrichedCarriers,
     });
   } catch (error) {
     next(error);
@@ -71,7 +148,49 @@ export const createCarrier = async (
       });
     }
     const query = {
-      text: "WITH inserted AS (INSERT INTO CARRIERS (residence_area, placement_date, placement_time, electronic_bracelet, beacon, wireless_charger, information_emails, contact_numbers, house_arrest, installer_name, observations, client_id, relationship_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *) SELECT A.carrier_id AS id, A.residence_area, A.placement_date, A.placement_time, A.electronic_bracelet, A.beacon, A.wireless_charger, A.information_emails, A.contact_numbers, A.house_arrest, A.installer_name, A.observations, A.client_id, A.relationship_id, B.defendant_name AS name, C.name AS relationship_name FROM inserted A INNER JOIN CLIENTS B ON A.client_id = B.client_id INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id",
+      text: `
+        WITH inserted AS (
+          INSERT INTO CARRIERS (
+            residence_area, placement_date, placement_time, electronic_bracelet, 
+            beacon, wireless_charger, information_emails, contact_numbers, 
+            house_arrest, installer_name, observations, client_id, relationship_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+          RETURNING *
+        ) 
+        SELECT 
+          A.carrier_id AS id, 
+          A.residence_area, 
+          A.placement_date, 
+          A.placement_time, 
+          A.electronic_bracelet, 
+          A.beacon, 
+          A.wireless_charger, 
+          A.information_emails, 
+          A.contact_numbers, 
+          A.house_arrest, 
+          A.installer_name, 
+          A.observations, 
+          A.client_id, 
+          A.relationship_id, 
+          B.defendant_name AS name,
+          B.contract_number,
+          B.criminal_case,
+          B.investigation_file_number,
+          B.judge_name,
+          B.court_name,
+          B.lawyer_name,
+          B.signer_name,
+          B.hearing_date,
+          B.contract_date,
+          B.contract_document,
+          B.contract_duration,
+          B.payment_day,
+          B.status as client_status,
+          B.contract,
+          C.name AS relationship_name 
+        FROM inserted A 
+        INNER JOIN CLIENTS B ON A.client_id = B.client_id 
+        INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id`,
       values: [
         residence_area,
         placement_date,
@@ -95,16 +214,82 @@ export const createCarrier = async (
         message: "No se pudo agregar el portador.",
       });
     }
-    const carrier_id = result.rows[0].id;
+    
+    const carrierData = result.rows[0];
+    const carrier_id = carrierData.id;
+
+    // Si vienen observaciones del cliente en el request, reemplazarlas completamente
+    if (observations && Array.isArray(observations)) {
+      // Primero eliminar todas las observaciones existentes del cliente
+      await pool.query({
+        text: "DELETE FROM CLIENT_OBSERVATIONS WHERE client_id = $1",
+        values: [client_id],
+      });
+
+      // Insertar las nuevas observaciones
+      for (const obs of observations) {
+        if (obs.date && obs.observation) {
+          await pool.query({
+            text: "INSERT INTO CLIENT_OBSERVATIONS (client_id, observation_date, observation) VALUES ($1, $2, $3)",
+            values: [client_id, obs.date, obs.observation],
+          });
+        }
+      }
+    }
+
+    // Si vienen contact_numbers del cliente, actualizarlos en CLIENT_CONTACTS
+    if (contact_numbers && Array.isArray(contact_numbers)) {
+      // Primero eliminar contactos existentes del cliente para evitar duplicados
+      await pool.query({
+        text: "DELETE FROM CLIENT_CONTACTS WHERE client_id = $1",
+        values: [client_id],
+      });
+
+      // Insertar los nuevos contactos
+      for (const contact of contact_numbers) {
+        if (contact.contact_name && contact.phone_number) {
+          await pool.query({
+            text: "INSERT INTO CLIENT_CONTACTS (client_id, contact_name, phone_number, relationship_id) VALUES ($1, $2, $3, $4)",
+            values: [
+              client_id, 
+              contact.contact_name, 
+              contact.phone_number, 
+              contact.relationship_id || null
+            ],
+          });
+        }
+      }
+    }
+
+    // Obtener contactos y observaciones del cliente
+    const contactResult = await pool.query({
+      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+             FROM CLIENT_CONTACTS cc 
+             LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
+             WHERE cc.client_id = $1`,
+      values: [client_id],
+    });
+    carrierData.client_contacts = contactResult.rows;
+
+    const observationResult = await pool.query({
+      text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date DESC",
+      values: [client_id],
+    });
+    carrierData.client_observations = observationResult.rows;
+
+    // Obtener actas del portador (inicialmente vacío)
+    carrierData.carrier_acts = [];
+
     const query2 = {
       text: "INSERT INTO OPERATIONS(carrier_id) VALUES($1)",
       values: [carrier_id],
     };
     await pool.query(query2);
+    
     return res.status(201).json({
       success: true,
       message: "El portador se ha agregado correctamente",
-      data: result.rows[0],
+      data: carrierData,
     });
   } catch (error: any) {
     next(error);
@@ -137,9 +322,52 @@ export const updateCarrier = async (
 
     const query = {
       text: `
-      WITH updated AS (
-      UPDATE CARRIERS CA SET residence_area=$1, placement_date=$2, placement_time=$3, electronic_bracelet=$4, beacon=$5, wireless_charger=$6, information_emails=$7, contact_numbers=$8, house_arrest=$9, installer_name=$10, observations=$11, relationship_id=$12 WHERE carrier_id=$13 RETURNING carrier_id, residence_area, placement_date, placement_time, electronic_bracelet, beacon, wireless_charger, information_emails, contact_numbers, house_arrest, installer_name, observations, relationship_id, client_id)
-      SELECT A.carrier_id AS id, A.residence_area, A.placement_date, A.placement_time, A.electronic_bracelet, A.beacon, A.wireless_charger, A.information_emails, A.contact_numbers, A.house_arrest, A.installer_name, A.observations, A.client_id, A.relationship_id, B.defendant_name AS name, C.name AS relationship_name FROM updated A INNER JOIN CLIENTS B ON A.client_id = B.client_id INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id`,
+        WITH updated AS (
+          UPDATE CARRIERS CA SET 
+            residence_area=$1, placement_date=$2, placement_time=$3, 
+            electronic_bracelet=$4, beacon=$5, wireless_charger=$6, 
+            information_emails=$7, contact_numbers=$8, house_arrest=$9, 
+            installer_name=$10, observations=$11, relationship_id=$12 
+          WHERE carrier_id=$13 
+          RETURNING carrier_id, residence_area, placement_date, placement_time, 
+                   electronic_bracelet, beacon, wireless_charger, information_emails, 
+                   contact_numbers, house_arrest, installer_name, observations, 
+                   relationship_id, client_id
+        )
+        SELECT 
+          A.carrier_id AS id, 
+          A.residence_area, 
+          A.placement_date, 
+          A.placement_time, 
+          A.electronic_bracelet, 
+          A.beacon, 
+          A.wireless_charger, 
+          A.information_emails, 
+          A.contact_numbers, 
+          A.house_arrest, 
+          A.installer_name, 
+          A.observations, 
+          A.client_id, 
+          A.relationship_id, 
+          B.defendant_name AS name,
+          B.contract_number,
+          B.criminal_case,
+          B.investigation_file_number,
+          B.judge_name,
+          B.court_name,
+          B.lawyer_name,
+          B.signer_name,
+          B.hearing_date,
+          B.contract_date,
+          B.contract_document,
+          B.contract_duration,
+          B.payment_day,
+          B.status as client_status,
+          B.contract,
+          C.name AS relationship_name 
+        FROM updated A 
+        INNER JOIN CLIENTS B ON A.client_id = B.client_id 
+        INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id`,
       values: [
         residence_area,
         placement_date,
@@ -161,10 +389,89 @@ export const updateCarrier = async (
       return res
         .status(404)
         .json({ message: "No se encontró ningún portador." });
+
+    const carrierData = result.rows[0];
+
+    // Si vienen observaciones del cliente en el request, reemplazarlas completamente
+    if (observations && Array.isArray(observations)) {
+      // Primero eliminar todas las observaciones existentes del cliente
+      await pool.query({
+        text: "DELETE FROM CLIENT_OBSERVATIONS WHERE client_id = $1",
+        values: [carrierData.client_id],
+      });
+
+      // Insertar las nuevas observaciones
+      for (const obs of observations) {
+        if (obs.date && obs.observation) {
+          await pool.query({
+            text: "INSERT INTO CLIENT_OBSERVATIONS (client_id, observation_date, observation) VALUES ($1, $2, $3)",
+            values: [carrierData.client_id, obs.date, obs.observation],
+          });
+        }
+      }
+    }
+
+    // Si vienen contact_numbers del cliente, actualizarlos en CLIENT_CONTACTS
+    if (contact_numbers && Array.isArray(contact_numbers)) {
+      // Primero eliminar contactos existentes del cliente para evitar duplicados
+      await pool.query({
+        text: "DELETE FROM CLIENT_CONTACTS WHERE client_id = $1",
+        values: [carrierData.client_id],
+      });
+
+      // Insertar los nuevos contactos
+      for (const contact of contact_numbers) {
+        if (contact.contact_name && contact.phone_number) {
+          await pool.query({
+            text: "INSERT INTO CLIENT_CONTACTS (client_id, contact_name, phone_number, relationship_id) VALUES ($1, $2, $3, $4)",
+            values: [
+              carrierData.client_id, 
+              contact.contact_name, 
+              contact.phone_number, 
+              contact.relationship_id || null
+            ],
+          });
+        }
+      }
+    }
+
+    // Obtener contactos y observaciones del cliente
+    const contactResult = await pool.query({
+      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+             FROM CLIENT_CONTACTS cc 
+             LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
+             WHERE cc.client_id = $1`,
+      values: [carrierData.client_id],
+    });
+    carrierData.client_contacts = contactResult.rows;
+
+    const observationResult = await pool.query({
+      text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date DESC",
+      values: [carrierData.client_id],
+    });
+    carrierData.client_observations = observationResult.rows;
+
+    // Obtener actas del portador
+    const actsResult = await pool.query({
+      text: `SELECT 
+               act_id,
+               act_document_url,
+               act_title,
+               act_description,
+               uploaded_by_name,
+               upload_date,
+               file_name
+             FROM CARRIER_ACTS 
+             WHERE carrier_id = $1 
+             ORDER BY upload_date DESC`,
+      values: [carrier_id],
+    });
+    carrierData.carrier_acts = actsResult.rows;
+
     return res.status(201).json({
       success: true,
       message: "El portador se ha modificado correctamente",
-      data: result.rows[0],
+      data: carrierData,
     });
   } catch (error: any) {
     next(error);

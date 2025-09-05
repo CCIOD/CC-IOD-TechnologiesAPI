@@ -16,7 +16,35 @@ import {
 
 const name = { name: stringValidation() };
 const email = { email: emailValidation };
-const contact_numbers = { contact_numbers: arrValuesValidation("contacto") };
+const contact_schema = Joi.object({
+  contact_name: stringValidation("nombre del contacto"),
+  relationship_id: Joi.alternatives()
+    .try(
+      Joi.number().integer().positive(),
+      Joi.string().pattern(/^\d+$/).custom((value, helpers) => {
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num <= 0) {
+          return helpers.error('any.invalid');
+        }
+        return num;
+      })
+    )
+    .optional()
+    .messages({
+      'alternatives.match': 'El ID de parentesco debe ser un número positivo',
+      'any.invalid': 'El ID de parentesco debe ser un número válido',
+    }),
+  phone_number: phoneValidation,
+  relationship_name: Joi.string().optional().allow(null, ''),
+});
+
+const contact_numbers = { 
+  contact_numbers: Joi.array().items(contact_schema).min(1).required().messages({
+    'array.base': 'Los contactos deben estar en un arreglo',
+    'any.required': 'Los contactos son requeridos.',
+    'array.min': 'Debe haber al menos un contacto.',
+  })
+};
 const relationship_id = {
   relationship_id: fieldIdValidation({
     field: "parentesco",
@@ -24,6 +52,11 @@ const relationship_id = {
     allowedMsg: "Familiar o Abogado",
   }),
 };
+
+const observationSchema = Joi.object({
+  date: dateValidation("fecha de la observación"),
+  observation: stringValidation("observación"),
+});
 
 export const prospectSchema = Joi.object({
   ...name,
@@ -35,11 +68,11 @@ export const prospectSchema = Joi.object({
     field: "estado",
   }),
   date: dateValidation(),
-  ...observationsValidation,
+  observations: Joi.array().items(observationSchema).optional(),
 });
 
 export const clientSchema = Joi.object({
-  contract_number: numberPositiveValidation("número de contrato"),
+  contract_number: Joi.string().optional().allow('', null),
   defendant_name: stringValidation("El nombre del imputado"),
   criminal_case: stringValidation("La causa penal"),
   investigation_file_number: numberPositiveValidation(
@@ -52,16 +85,29 @@ export const clientSchema = Joi.object({
   signer_name: stringValidation("El nombre de quién firma el contrato"),
   ...contact_numbers,
   hearing_date: dateValidation("fecha de audiencia"),
+  contract_date: Joi.date().iso().optional().allow('', null).messages({
+    'date.base': 'La fecha del contrato debe ser una fecha válida.',
+    'date.isoDate': 'El formato de la fecha del contrato debe ser válido (YYYY-MM-DD o ISO 8601).',
+  }),
+  contract_document: Joi.string().optional().allow('', null),
+  contract_duration: Joi.string().optional().allow('', null),
+  payment_day: Joi.number().integer().min(1).max(31).optional().messages({
+    'number.base': 'El día de pago debe ser un número',
+    'number.integer': 'El día de pago debe ser un número entero',
+    'number.min': 'El día de pago debe ser entre 1 y 31',
+    'number.max': 'El día de pago debe ser entre 1 y 31',
+  }),
   status: statusValidation({
     allowedValues: [
       "Pendiente de aprobación",
       "Pendiente de audiencia",
       "Pendiente de colocación",
       "Colocado",
+      "Desinstalado",
     ],
     field: "estado",
   }),
-  ...observationsValidation,
+  observations: Joi.array().items(observationSchema).optional(),
   prospect_id: fieldIdValidation({
     field: "prospecto",
     req: "Debe haber un prospecto a la cuál definir como cliente.",
@@ -79,7 +125,7 @@ export const carrierSchema = Joi.object({
   ...contact_numbers,
   house_arrest: stringValidation("El arraigo domiciliario"),
   installer_name: stringValidation("El nombre del instalador"),
-  ...observationsValidation,
+  observations: Joi.any().optional(), // Permite cualquier tipo de observaciones
   client_id: fieldIdValidation({
     field: "cliente",
     req: "Debe haber un cliente a la cuál definir como portador.",
@@ -104,4 +150,15 @@ export const updateAdminSchema = Joi.object({ ...name });
 export const loginSchema = Joi.object({ ...email, ...passwordValidation });
 export const changePassSchema = Joi.object({ ...passwordValidation });
 export const emailSchema = Joi.object({ ...email });
+
+// Esquema para desinstalación de clientes
+export const uninstallClientSchema = Joi.object({
+  uninstall_reason: stringValidation("motivo de desinstalación").optional(),
+  uninstall_date: dateValidation("fecha de desinstalación").optional(),
+});
+
+export const carrierActSchema = Joi.object({
+  act_title: stringValidation("título del acta").max(255),
+  act_description: stringValidation("descripción del acta").optional().allow(''),
+});
 // 107
