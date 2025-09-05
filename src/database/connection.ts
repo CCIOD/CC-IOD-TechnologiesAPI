@@ -10,7 +10,7 @@ export const pool = new Pool({
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
   allowExitOnIdle: true,
-  ssl: false, // Azure requiere SSL siempre
+  ssl: isProduction ? { rejectUnauthorized: false } : false, // Azure requiere SSL siempre
   connectionTimeoutMillis: 30000, // 30 segundos timeout
   idleTimeoutMillis: 30000, // 30 segundos idle timeout
   max: 10, // máximo 10 conexiones
