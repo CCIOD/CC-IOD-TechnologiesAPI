@@ -42,7 +42,7 @@ export const getAllCarriers = async (
       FROM CARRIERS A 
       INNER JOIN CLIENTS B ON A.client_id = B.client_id 
       INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id 
-      ORDER BY carrier_id`;
+      ORDER BY A.placement_date DESC`;
     
     const result = await pool.query(query);
     if (!result.rowCount)
