@@ -3,23 +3,38 @@ import { pool } from "../database/connection";
 import { azureDeleteBlob, azureUploadBlob } from "../services/azure.service";
 import { getBlobName } from "../helpers/helpers";
 import { logClientChange } from "../services/audit.service";
+import { logError, logSuccess, logInfo, logWarning } from "../middlewares/loggingMiddleware";
+import { asyncHandler } from "../middlewares/enhancedMiddlewares";
 
-export const getAllClients = async (
+export const getAllClients = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<Response | void> => {
+  logInfo("📋 Retrieving all clients", { 
+    requestedBy: (req as any).user?.email || 'Unknown',
+    timestamp: new Date().toISOString()
+  });
+
   try {
     const clientQuery =
-      "SELECT client_id as id, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day FROM CLIENTS ORDER BY client_id";
+      "SELECT client_id as id, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY registered_at DESC, client_id";
+    
+    logInfo("🔍 Executing client query", { query: "SELECT all clients ordered by registered_at DESC" });
     const clientResult = await pool.query(clientQuery);
 
-    if (!clientResult.rowCount)
+    if (!clientResult.rowCount) {
+      logWarning("📋 No clients found in database");
       return res
         .status(404)
-        .json({ message: "No se encontró ningún cliente." });
+        .json({ 
+          success: false,
+          message: "No se encontró ningún cliente." 
+        });
+    }
 
     const clients = clientResult.rows;
+    logInfo(`📊 Found ${clients.length} clients, enriching with contacts and observations`);
 
     // Obtener contactos y observaciones para cada cliente
     const enrichmentQueries = clients.map(async (client: any) => {
@@ -44,23 +59,43 @@ export const getAllClients = async (
     });
 
     const enrichedClients = await Promise.all(enrichmentQueries);
+    
+    logSuccess("✅ Successfully retrieved and enriched all clients", {
+      clientCount: enrichedClients.length,
+      totalContacts: enrichedClients.reduce((acc, client) => acc + client.contact_numbers.length, 0),
+      totalObservations: enrichedClients.reduce((acc, client) => acc + client.observations.length, 0)
+    });
 
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
       message: "Información de todos los clientes",
       data: enrichedClients,
     });
   } catch (error) {
+    logError(error, "getAllClients");
     next(error);
   }
-};
+});
 
-export const getClientById = async (
+export const getClientById = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<Response | void> => {
   const client_id = parseInt(req.params.id);
+  
+  logInfo("🔍 Retrieving client by ID", { 
+    clientId: client_id,
+    requestedBy: (req as any).user?.email || 'Unknown'
+  });
+
+  if (isNaN(client_id)) {
+    logWarning("❌ Invalid client ID provided", { providedId: req.params.id });
+    return res.status(400).json({
+      success: false,
+      message: "ID de cliente inválido"
+    });
+  }
 
   try {
     const clientQuery = `
@@ -81,14 +116,18 @@ export const getClientById = async (
         contract_date, 
         contract_document, 
         contract_duration, 
-        payment_day 
+        payment_day,
+        payment_frequency,
+        registered_at 
       FROM CLIENTS 
       WHERE client_id = $1
     `;
     
+    logInfo("🔍 Executing client query by ID", { clientId: client_id });
     const clientResult = await pool.query(clientQuery, [client_id]);
 
     if (!clientResult.rowCount) {
+      logWarning("📋 Client not found", { clientId: client_id });
       return res.status(404).json({ 
         success: false,
         message: "No se encontró el cliente especificado." 
@@ -96,6 +135,7 @@ export const getClientById = async (
     }
 
     const client = clientResult.rows[0];
+    logInfo("📊 Client found, retrieving contacts and observations", { clientId: client_id });
 
     // Obtener contactos del cliente
     const contactResult = await pool.query({
@@ -114,17 +154,25 @@ export const getClientById = async (
     });
     client.observations = observationResult.rows;
 
+    logSuccess("✅ Client retrieved successfully", {
+      clientId: client_id,
+      clientName: client.name,
+      contactsCount: client.contact_numbers.length,
+      observationsCount: client.observations.length
+    });
+
     return res.status(200).json({
       success: true,
       message: "Información del cliente",
       data: client,
     });
   } catch (error) {
+    logError(error, `getClientById - clientId: ${client_id}`);
     next(error);
   }
-};
+});
 
-export const createClient = async (
+export const createClient = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -144,10 +192,20 @@ export const createClient = async (
     contract_document,
     contract_duration,
     payment_day,
+    payment_frequency,
     observations,
     status,
     prospect_id,
   } = req.body;
+
+  logInfo("👤 Creating new client", { 
+    defendantName: defendant_name,
+    prospectId: prospect_id,
+    requestedBy: (req as any).user?.email || 'Unknown',
+    contractsCount: contact_numbers?.length || 0,
+    observationsCount: observations?.length || 0
+  });
+
   try {
     const invFileOptional = investigation_file_number
       ? investigation_file_number
@@ -156,21 +214,36 @@ export const createClient = async (
       ? new Date(contract_date).toISOString().split('T')[0] 
       : null;
 
+    logInfo("🔍 Validating prospect status", { prospectId: prospect_id });
     const prospect = await pool.query(
       "SELECT status FROM PROSPECTS WHERE prospect_id = $1",
       [prospect_id]
     );
 
+    if (!prospect.rows.length) {
+      logWarning("❌ Prospect not found", { prospectId: prospect_id });
+      return res.status(404).json({
+        success: false,
+        message: "No se encontró el prospecto especificado.",
+      });
+    }
+
     if (prospect.rows[0].status !== "Aprobado") {
+      logWarning("❌ Prospect not approved for client creation", { 
+        prospectId: prospect_id, 
+        currentStatus: prospect.rows[0].status 
+      });
       return res.status(400).json({
         success: false,
         message: "No es posible agregar un cliente sin antes ser aprobado.",
       });
     }
 
-    // Insertar cliente
+    logInfo("✅ Prospect validation passed, inserting client", { prospectId: prospect_id });
+
+    // Insertar cliente con timestamp de registro automático
     const clientQuery = {
-      text: "INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, hearing_date, contract_date, contract_document, contract_duration, payment_day, status, prospect_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING client_id",
+      text: "INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, hearing_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, status, prospect_id, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP) RETURNING client_id",
       values: [
         contract_number || null,
         defendant_name,
@@ -185,6 +258,7 @@ export const createClient = async (
         contract_document || null,
         contract_duration || null,
         payment_day || null,
+        payment_frequency || null,
         status,
         prospect_id,
       ],
@@ -192,8 +266,18 @@ export const createClient = async (
     const clientResult = await pool.query(clientQuery);
     const clientId = clientResult.rows[0].client_id;
 
+    logSuccess("✅ Client created successfully", { 
+      clientId: clientId,
+      defendantName: defendant_name 
+    });
+
     // Insertar contactos
-    if (contact_numbers && Array.isArray(contact_numbers)) {
+    if (contact_numbers && Array.isArray(contact_numbers) && contact_numbers.length > 0) {
+      logInfo("📞 Inserting client contacts", { 
+        clientId: clientId,
+        contactsCount: contact_numbers.length 
+      });
+
       const contactQueries = contact_numbers.map((contact: any) => {
         return pool.query({
           text: "INSERT INTO CLIENT_CONTACTS(client_id, contact_name, relationship_id, phone_number) VALUES($1, $2, $3, $4)",
@@ -201,10 +285,20 @@ export const createClient = async (
         });
       });
       await Promise.all(contactQueries);
+      
+      logSuccess("✅ Client contacts inserted", { 
+        clientId: clientId,
+        contactsCount: contact_numbers.length 
+      });
     }
 
     // Insertar observaciones
-    if (observations && Array.isArray(observations)) {
+    if (observations && Array.isArray(observations) && observations.length > 0) {
+      logInfo("📝 Inserting client observations", { 
+        clientId: clientId,
+        observationsCount: observations.length 
+      });
+
       const observationQueries = observations.map((obs: any) => {
         const formattedObsDate = new Date(obs.date).toISOString().split('T')[0];
         return pool.query({
@@ -213,17 +307,27 @@ export const createClient = async (
         });
       });
       await Promise.all(observationQueries);
+      
+      logSuccess("✅ Client observations inserted", { 
+        clientId: clientId,
+        observationsCount: observations.length 
+      });
     }
 
     // Registrar en auditoría la creación del cliente
-    if (req.user) {
+    if ((req as any).user) {
+      logInfo("📋 Logging client creation to audit", { 
+        clientId: clientId,
+        userId: (req as any).user.id 
+      });
+
       await logClientChange({
         client_id: clientId,
-        user_id: req.user.id,
-        user_name: req.user.name || req.user.email,
+        user_id: (req as any).user.id,
+        user_name: (req as any).user.name || (req as any).user.email,
         action_type: 'CREATE',
         new_value: `Cliente creado: ${defendant_name}`,
-        ip_address: req.clientIp,
+        ip_address: (req as any).clientIp,
         user_agent: req.headers['user-agent'],
       });
       
@@ -231,11 +335,11 @@ export const createClient = async (
       if (contact_numbers && Array.isArray(contact_numbers) && contact_numbers.length > 0) {
         await logClientChange({
           client_id: clientId,
-          user_id: req.user.id,
-          user_name: req.user.name || req.user.email,
+          user_id: (req as any).user.id,
+          user_name: (req as any).user.name || (req as any).user.email,
           action_type: 'CONTACT_ADD',
           new_value: `${contact_numbers.length} contacto(s) agregado(s)`,
-          ip_address: req.clientIp,
+          ip_address: (req as any).clientIp,
           user_agent: req.headers['user-agent'],
         });
       }
@@ -244,15 +348,22 @@ export const createClient = async (
       if (observations && Array.isArray(observations) && observations.length > 0) {
         await logClientChange({
           client_id: clientId,
-          user_id: req.user.id,
-          user_name: req.user.name || req.user.email,
+          user_id: (req as any).user.id,
+          user_name: (req as any).user.name || (req as any).user.email,
           action_type: 'OBSERVATION_ADD',
           new_value: `${observations.length} observación(es) agregada(s)`,
-          ip_address: req.clientIp,
+          ip_address: (req as any).clientIp,
           user_agent: req.headers['user-agent'],
         });
       }
     }
+
+    logSuccess("🎉 Client creation completed successfully", {
+      clientId: clientId,
+      defendantName: defendant_name,
+      totalContacts: contact_numbers?.length || 0,
+      totalObservations: observations?.length || 0
+    });
 
     return res.status(201).json({
       success: true,
@@ -273,16 +384,19 @@ export const createClient = async (
         contract_document,
         contract_duration,
         payment_day,
+        payment_frequency,
         status,
         prospect_id,
         observations,
       },
     });
   } catch (error: any) {
+    logError(error, `createClient - defendant: ${defendant_name}`);
     next(error);
   }
-};
-export const updateClient = async (
+});
+
+export const updateClient = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
@@ -303,12 +417,29 @@ export const updateClient = async (
     contract_document,
     contract_duration,
     payment_day,
+    payment_frequency,
     observations,
     status,
     prospect_id,
   } = req.body;
+
+  logInfo("✏️ Updating client", { 
+    clientId: client_id,
+    defendantName: defendant_name,
+    requestedBy: (req as any).user?.email || 'Unknown'
+  });
+
+  if (isNaN(client_id)) {
+    logWarning("❌ Invalid client ID for update", { providedId: req.params.id });
+    return res.status(400).json({
+      success: false,
+      message: "ID de cliente inválido"
+    });
+  }
+
   try {
     // Obtener datos actuales del cliente para comparar cambios
+    logInfo("🔍 Fetching current client data", { clientId: client_id });
     const currentClientQuery = {
       text: "SELECT * FROM CLIENTS WHERE client_id = $1",
       values: [client_id],
@@ -316,22 +447,42 @@ export const updateClient = async (
     const currentClientResult = await pool.query(currentClientQuery);
     
     if (!currentClientResult.rowCount) {
+      logWarning("📋 Client not found for update", { clientId: client_id });
       return res
         .status(404)
-        .json({ message: "No se encontró ningún cliente." });
+        .json({ 
+          success: false,
+          message: "No se encontró ningún cliente." 
+        });
     }
     
     const currentClient = currentClientResult.rows[0];
+    logInfo("📊 Current client data retrieved", { 
+      clientId: client_id,
+      currentName: currentClient.defendant_name 
+    });
 
-    const client = await pool.query(
+    // Verificar si el cliente es portador para ajustar status
+    logInfo("🔍 Checking if client is a carrier", { clientId: client_id });
+    const carrierCheck = await pool.query(
       "SELECT client_id FROM CARRIERS WHERE client_id = $1",
       [client_id]
     );
-    const newStatus = client.rowCount
+    
+    const newStatus = carrierCheck.rowCount
       ? status === "Pendiente de colocación" || status === "Colocado"
         ? status
         : "Pendiente de colocación"
       : status;
+
+    if (carrierCheck.rowCount && newStatus !== status) {
+      logInfo("⚠️ Status adjusted for carrier client", { 
+        clientId: client_id,
+        requestedStatus: status,
+        adjustedStatus: newStatus 
+      });
+    }
+
     const invFileOptional = investigation_file_number
       ? investigation_file_number
       : null;
@@ -340,8 +491,9 @@ export const updateClient = async (
       : null;
 
     // Actualizar cliente
+    logInfo("💾 Updating client data", { clientId: client_id });
     const clientQuery = {
-      text: "UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, hearing_date=$9, contract_date=$10, contract_document=$11, contract_duration=$12, payment_day=$13, status=$14 WHERE client_id = $15 RETURNING *",
+      text: "UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, hearing_date=$9, contract_date=$10, contract_document=$11, contract_duration=$12, payment_day=$13, payment_frequency=$14, status=$15 WHERE client_id = $16 RETURNING *",
       values: [
         contract_number || null,
         defendant_name,
@@ -356,14 +508,25 @@ export const updateClient = async (
         contract_document || null,
         contract_duration || null,
         payment_day || null,
+        payment_frequency || null,
         newStatus,
         client_id,
       ],
     };
     const clientResult = await pool.query(clientQuery);
 
+    logSuccess("✅ Client updated successfully", { 
+      clientId: client_id,
+      defendantName: defendant_name 
+    });
+
     // Registrar cambios detallados en auditoría
-    if (req.user) {
+    if ((req as any).user) {
+      logInfo("📋 Logging detailed changes to audit", { 
+        clientId: client_id,
+        userId: (req as any).user.id 
+      });
+
       const fieldsToCheck = [
         { name: 'contract_number', old: currentClient.contract_number, new: contract_number },
         { name: 'defendant_name', old: currentClient.defendant_name, new: defendant_name },
@@ -378,30 +541,43 @@ export const updateClient = async (
         { name: 'contract_document', old: currentClient.contract_document, new: contract_document },
         { name: 'contract_duration', old: currentClient.contract_duration, new: contract_duration },
         { name: 'payment_day', old: currentClient.payment_day, new: payment_day },
+        { name: 'payment_frequency', old: currentClient.payment_frequency, new: payment_frequency },
         { name: 'status', old: currentClient.status, new: newStatus },
       ];
 
+      let changesCount = 0;
       for (const field of fieldsToCheck) {
         if (field.old !== field.new) {
+          changesCount++;
           await logClientChange({
             client_id,
-            user_id: req.user.id,
-            user_name: req.user.name || req.user.email,
+            user_id: (req as any).user.id,
+            user_name: (req as any).user.name || (req as any).user.email,
             action_type: 'UPDATE',
             field_name: field.name,
             old_value: field.old?.toString() || null,
             new_value: field.new?.toString() || null,
-            ip_address: req.clientIp,
+            ip_address: (req as any).clientIp,
             user_agent: req.headers['user-agent'],
           });
         }
       }
+
+      logInfo(`📝 Logged ${changesCount} field changes to audit`, { 
+        clientId: client_id,
+        changesCount 
+      });
     }
 
     // Actualizar contactos
     if (contact_numbers && Array.isArray(contact_numbers)) {
+      logInfo("📞 Updating client contacts", { 
+        clientId: client_id,
+        newContactsCount: contact_numbers.length 
+      });
+
       // Registrar eliminación de contactos existentes
-      if (req.user) {
+      if ((req as any).user) {
         const currentContactsResult = await pool.query({
           text: "SELECT COUNT(*) as count FROM CLIENT_CONTACTS WHERE client_id = $1",
           values: [client_id],
@@ -411,11 +587,11 @@ export const updateClient = async (
         if (currentContactsCount > 0) {
           await logClientChange({
             client_id,
-            user_id: req.user.id,
-            user_name: req.user.name || req.user.email,
+            user_id: (req as any).user.id,
+            user_name: (req as any).user.name || (req as any).user.email,
             action_type: 'CONTACT_DELETE',
             old_value: `${currentContactsCount} contacto(s) eliminado(s)`,
-            ip_address: req.clientIp,
+            ip_address: (req as any).clientIp,
             user_agent: req.headers['user-agent'],
           });
         }
@@ -436,23 +612,34 @@ export const updateClient = async (
       });
       await Promise.all(contactQueries);
 
+      logSuccess("✅ Client contacts updated", { 
+        clientId: client_id,
+        contactsCount: contact_numbers.length 
+      });
+
       // Registrar adición de nuevos contactos
-      if (req.user && contact_numbers.length > 0) {
+      if ((req as any).user && contact_numbers.length > 0) {
         await logClientChange({
           client_id,
-          user_id: req.user.id,
-          user_name: req.user.name || req.user.email,
+          user_id: (req as any).user.id,
+          user_name: (req as any).user.name || (req as any).user.email,
           action_type: 'CONTACT_UPDATE',
           new_value: `${contact_numbers.length} contacto(s) actualizado(s)`,
-          ip_address: req.clientIp,
+          ip_address: (req as any).clientIp,
           user_agent: req.headers['user-agent'],
         });
       }
     }
 
+    // Actualizar observaciones
     if (observations && Array.isArray(observations)) {
+      logInfo("📝 Updating client observations", { 
+        clientId: client_id,
+        newObservationsCount: observations.length 
+      });
+
       // Registrar eliminación de observaciones existentes
-      if (req.user) {
+      if ((req as any).user) {
         const currentObservationsResult = await pool.query({
           text: "SELECT COUNT(*) as count FROM CLIENT_OBSERVATIONS WHERE client_id = $1",
           values: [client_id],
@@ -462,11 +649,11 @@ export const updateClient = async (
         if (currentObservationsCount > 0) {
           await logClientChange({
             client_id,
-            user_id: req.user.id,
-            user_name: req.user.name || req.user.email,
+            user_id: (req as any).user.id,
+            user_name: (req as any).user.name || (req as any).user.email,
             action_type: 'OBSERVATION_DELETE',
             old_value: `${currentObservationsCount} observación(es) eliminada(s)`,
-            ip_address: req.clientIp,
+            ip_address: (req as any).clientIp,
             user_agent: req.headers['user-agent'],
           });
         }
@@ -488,37 +675,66 @@ export const updateClient = async (
       });
       await Promise.all(observationQueries);
 
+      logSuccess("✅ Client observations updated", { 
+        clientId: client_id,
+        observationsCount: observations.length 
+      });
+
       // Registrar adición de nuevas observaciones
-      if (req.user && observations.length > 0) {
+      if ((req as any).user && observations.length > 0) {
         await logClientChange({
           client_id,
-          user_id: req.user.id,
-          user_name: req.user.name || req.user.email,
+          user_id: (req as any).user.id,
+          user_name: (req as any).user.name || (req as any).user.email,
           action_type: 'OBSERVATION_UPDATE',
           new_value: `${observations.length} observación(es) actualizada(s)`,
-          ip_address: req.clientIp,
+          ip_address: (req as any).clientIp,
           user_agent: req.headers['user-agent'],
         });
       }
     }
 
-    return res.status(201).json({
+    logSuccess("🎉 Client update completed successfully", {
+      clientId: client_id,
+      defendantName: defendant_name,
+      totalContacts: contact_numbers?.length || 0,
+      totalObservations: observations?.length || 0
+    });
+
+    return res.status(200).json({
       success: true,
       message: "El cliente se ha modificado correctamente",
       data: clientResult.rows[0],
     });
   } catch (error) {
+    logError(error, `updateClient - clientId: ${client_id}`);
     next(error);
   }
-};
-export const deleteClient = async (
+});
+
+export const deleteClient = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<Response | void> => {
   const clientId = parseInt(req.params.id);
+  
+  logInfo("🗑️ Deleting client", { 
+    clientId: clientId,
+    requestedBy: (req as any).user?.email || 'Unknown' 
+  });
+
+  if (isNaN(clientId)) {
+    logWarning("❌ Invalid client ID for deletion", { providedId: req.params.id });
+    return res.status(400).json({
+      success: false,
+      message: "ID de cliente inválido"
+    });
+  }
+
   try {
     // Obtener información del cliente antes de eliminarlo
+    logInfo("🔍 Fetching client info before deletion", { clientId: clientId });
     const clientInfoQuery = {
       text: "SELECT defendant_name, contract FROM CLIENTS WHERE client_id = $1",
       values: [clientId],
@@ -526,54 +742,94 @@ export const deleteClient = async (
     const clientInfoResult = await pool.query(clientInfoQuery);
     
     if (!clientInfoResult.rowCount) {
+      logWarning("📋 Client not found for deletion", { clientId: clientId });
       return res
         .status(404)
-        .json({ message: "El cliente que desea eliminar no se encuentra." });
+        .json({ 
+          success: false,
+          message: "El cliente que desea eliminar no se encuentra." 
+        });
     }
     
     const clientInfo = clientInfoResult.rows[0];
+    logInfo("📊 Client found, proceeding with deletion", { 
+      clientId: clientId,
+      clientName: clientInfo.defendant_name 
+    });
 
+    // Eliminar cliente
     const query = {
       text: "DELETE FROM CLIENTS WHERE client_id = $1 RETURNING contract",
       values: [clientId],
     };
     const result = await pool.query(query);
     
+    logSuccess("✅ Client deleted from database", { 
+      clientId: clientId,
+      clientName: clientInfo.defendant_name 
+    });
+    
+    // Eliminar contrato de Azure si existe
     const BDContract: string | null = result.rows[0].contract;
     if (BDContract) {
+      logInfo("🗂️ Deleting contract from Azure storage", { 
+        clientId: clientId,
+        contractUrl: BDContract 
+      });
+
       const contract = getBlobName(BDContract);
       const { message, success } = await azureDeleteBlob({
         blobname: contract,
         containerName: "contracts",
       });
-      if (!success)
+      
+      if (!success) {
+        logError(`Failed to delete contract from Azure: ${message}`, 'deleteClient - Azure');
         return res.status(500).json({
           success: false,
           message: message,
         });
+      }
+
+      logSuccess("✅ Contract deleted from Azure storage", { 
+        clientId: clientId,
+        contractName: contract 
+      });
     }
 
     // Registrar eliminación en auditoría
-    if (req.user) {
+    if ((req as any).user) {
+      logInfo("📋 Logging client deletion to audit", { 
+        clientId: clientId,
+        userId: (req as any).user.id 
+      });
+
       await logClientChange({
         client_id: clientId,
-        user_id: req.user.id,
-        user_name: req.user.name || req.user.email,
+        user_id: (req as any).user.id,
+        user_name: (req as any).user.name || (req as any).user.email,
         action_type: 'DELETE',
         old_value: `Cliente eliminado: ${clientInfo.defendant_name}`,
-        ip_address: req.clientIp,
+        ip_address: (req as any).clientIp,
         user_agent: req.headers['user-agent'],
       });
     }
 
-    return res.status(201).json({
+    logSuccess("🎉 Client deletion completed successfully", {
+      clientId: clientId,
+      clientName: clientInfo.defendant_name,
+      hadContract: !!BDContract
+    });
+
+    return res.status(200).json({
       success: true,
       message: `El cliente ${clientId} ha sido eliminado`,
     });
   } catch (error: any) {
+    logError(error, `deleteClient - clientId: ${clientId}`);
     next(error);
   }
-};
+});
 
 export const getApprovedClientsWithoutCarrier = async (
   req: Request,

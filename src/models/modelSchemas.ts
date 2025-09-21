@@ -7,6 +7,7 @@ import {
   numberPositiveValidation,
   observationsValidation,
   passwordValidation,
+  paymentFrequencyValidation,
   phoneValidation,
   roleIdValidation,
   statusValidation,
@@ -97,6 +98,7 @@ export const clientSchema = Joi.object({
     'number.min': 'El día de pago debe ser entre 1 y 31',
     'number.max': 'El día de pago debe ser entre 1 y 31',
   }),
+  payment_frequency: paymentFrequencyValidation.optional(),
   status: statusValidation({
     allowedValues: [
       "Pendiente de aprobación",

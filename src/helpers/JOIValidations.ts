@@ -192,3 +192,10 @@ export const paymentDayValidation = Joi.number()
     'number.max': 'El día de pago debe ser entre 1 y 31',
     'any.required': 'El día de pago es obligatorio',
   });
+
+export const paymentFrequencyValidation = Joi.string()
+  .valid('Mensual', 'Bimestral', 'Trimestral', 'Semestral', 'Contado')
+  .messages({
+    'string.base': 'La frecuencia de pago debe ser texto',
+    'any.only': 'La frecuencia de pago debe ser: Mensual, Bimestral, Trimestral, Semestral o Contado',
+  });

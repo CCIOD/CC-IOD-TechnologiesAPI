@@ -23,10 +23,6 @@ pool.on('error', (err) => {
   console.error('Error inesperado en el cliente de la base de datos:', err);
 });
 
-pool.on('connect', () => {
-  console.log('Conectado a la base de datos PostgreSQL');
-});
-
 // Verificar conexión al inicializar
 pool.connect()
   .then(client => {
