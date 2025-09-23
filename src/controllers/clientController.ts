@@ -18,9 +18,9 @@ export const getAllClients = asyncHandler(async (
 
   try {
     const clientQuery =
-      "SELECT client_id as id, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY registered_at DESC, client_id";
+      "SELECT client_id as id, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY CAST(contract_number AS INTEGER) DESC NULLS LAST, client_id";
     
-    logInfo("🔍 Executing client query", { query: "SELECT all clients ordered by registered_at DESC" });
+    logInfo("🔍 Executing client query", { query: "SELECT all clients ordered by contract_number (numeric) DESC" });
     const clientResult = await pool.query(clientQuery);
 
     if (!clientResult.rowCount) {
