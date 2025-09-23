@@ -73,7 +73,27 @@ export const prospectSchema = Joi.object({
 });
 
 export const clientSchema = Joi.object({
-  contract_number: Joi.string().optional().allow('', null),
+  contract_number: Joi.alternatives()
+    .try(
+      Joi.number().integer().min(1),
+      Joi.string().pattern(/^[1-9]\d*$/, 'valid number')
+    )
+    .optional()
+    .allow(null)
+    .messages({
+      'alternatives.match': 'El número de contrato debe ser un número entero positivo',
+      'number.base': 'El número de contrato debe ser un número',
+      'number.integer': 'El número de contrato debe ser un número entero',
+      'number.min': 'El número de contrato debe ser mayor que 0',
+      'string.pattern.base': 'El número de contrato debe contener solo dígitos y ser mayor que 0',
+      'string.pattern.name': 'El número de contrato debe ser un número válido',
+    }),
+  contract_folio: Joi.string().optional().allow('', null).messages({
+    'string.base': 'El folio del contrato debe ser texto',
+  }),
+  bracelet_type: Joi.string().optional().allow('', null).messages({
+    'string.base': 'El tipo de brazalete debe ser texto',
+  }),
   defendant_name: stringValidation("El nombre del imputado"),
   criminal_case: stringValidation("La causa penal"),
   investigation_file_number: numberPositiveValidation(

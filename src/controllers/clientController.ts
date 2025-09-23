@@ -18,9 +18,9 @@ export const getAllClients = asyncHandler(async (
 
   try {
     const clientQuery =
-      "SELECT client_id as id, contract_number, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY CAST(contract_number AS INTEGER) DESC NULLS LAST, client_id";
+      "SELECT client_id as id, contract_number, contract_folio, bracelet_type, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY contract_number DESC NULLS LAST, client_id";
     
-    logInfo("🔍 Executing client query", { query: "SELECT all clients ordered by contract_number (numeric) DESC" });
+    logInfo("🔍 Executing client query", { query: "SELECT all clients ordered by contract_number DESC" });
     const clientResult = await pool.query(clientQuery);
 
     if (!clientResult.rowCount) {
@@ -102,6 +102,8 @@ export const getClientById = asyncHandler(async (
       SELECT 
         client_id as id, 
         contract_number, 
+        contract_folio,
+        bracelet_type,
         court_name, 
         criminal_case, 
         defendant_name as name, 
@@ -179,6 +181,8 @@ export const createClient = asyncHandler(async (
 ): Promise<Response | void> => {
   const {
     contract_number,
+    contract_folio,
+    bracelet_type,
     defendant_name,
     criminal_case,
     investigation_file_number,
@@ -243,9 +247,11 @@ export const createClient = asyncHandler(async (
 
     // Insertar cliente con timestamp de registro automático
     const clientQuery = {
-      text: "INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, hearing_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, status, prospect_id, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, CURRENT_TIMESTAMP) RETURNING client_id",
+      text: "INSERT INTO CLIENTS(contract_number, contract_folio, bracelet_type, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, hearing_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, status, prospect_id, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP) RETURNING client_id",
       values: [
         contract_number || null,
+        contract_folio || null,
+        bracelet_type || null,
         defendant_name,
         criminal_case,
         invFileOptional,
@@ -371,6 +377,8 @@ export const createClient = asyncHandler(async (
       data: {
         id: clientId,
         contract_number,
+        contract_folio,
+        bracelet_type,
         defendant_name,
         criminal_case,
         investigation_file_number: invFileOptional,
@@ -404,6 +412,8 @@ export const updateClient = asyncHandler(async (
   const client_id = parseInt(req.params.id);
   const {
     contract_number,
+    contract_folio,
+    bracelet_type,
     defendant_name,
     criminal_case,
     investigation_file_number,
@@ -493,9 +503,11 @@ export const updateClient = asyncHandler(async (
     // Actualizar cliente
     logInfo("💾 Updating client data", { clientId: client_id });
     const clientQuery = {
-      text: "UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, hearing_date=$9, contract_date=$10, contract_document=$11, contract_duration=$12, payment_day=$13, payment_frequency=$14, status=$15 WHERE client_id = $16 RETURNING *",
+      text: "UPDATE CLIENTS SET contract_number=$1, contract_folio=$2, bracelet_type=$3, defendant_name=$4, criminal_case=$5, investigation_file_number=$6, judge_name=$7, court_name=$8, lawyer_name=$9, signer_name=$10, hearing_date=$11, contract_date=$12, contract_document=$13, contract_duration=$14, payment_day=$15, payment_frequency=$16, status=$17 WHERE client_id = $18 RETURNING *",
       values: [
         contract_number || null,
+        contract_folio || null,
+        bracelet_type || null,
         defendant_name,
         criminal_case,
         invFileOptional,
@@ -529,6 +541,8 @@ export const updateClient = asyncHandler(async (
 
       const fieldsToCheck = [
         { name: 'contract_number', old: currentClient.contract_number, new: contract_number },
+        { name: 'contract_folio', old: currentClient.contract_folio, new: contract_folio },
+        { name: 'bracelet_type', old: currentClient.bracelet_type, new: bracelet_type },
         { name: 'defendant_name', old: currentClient.defendant_name, new: defendant_name },
         { name: 'criminal_case', old: currentClient.criminal_case, new: criminal_case },
         { name: 'investigation_file_number', old: currentClient.investigation_file_number, new: invFileOptional },
@@ -1023,10 +1037,10 @@ export const uninstallClient = async (
 
     // Obtener los datos actualizados del cliente con contactos y observaciones
     const enrichedClientQuery = {
-      text: `SELECT client_id as id, contract_number, court_name, criminal_case, 
+      text: `SELECT client_id as id, contract_number, contract_folio, bracelet_type, court_name, criminal_case, 
                     defendant_name as name, hearing_date, investigation_file_number, 
                     judge_name, lawyer_name, prospect_id, signer_name, status, 
-                    contract, contract_date, contract_document, contract_duration, payment_day 
+                    contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency 
              FROM CLIENTS WHERE client_id = $1`,
       values: [client_id],
     };
