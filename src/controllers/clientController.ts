@@ -18,7 +18,7 @@ export const getAllClients = asyncHandler(async (
 
   try {
     const clientQuery =
-      "SELECT client_id as id, contract_number, contract_folio, bracelet_type, court_name, criminal_case, defendant_name as name, hearing_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY contract_number DESC NULLS LAST, client_id";
+      "SELECT client_id as id, contract_number, contract_folio, bracelet_type, court_name, criminal_case, defendant_name as name, placement_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY contract_number DESC NULLS LAST, client_id";
     
     logInfo("🔍 Executing client query", { query: "SELECT all clients ordered by contract_number DESC" });
     const clientResult = await pool.query(clientQuery);
@@ -55,6 +55,16 @@ export const getAllClients = asyncHandler(async (
       });
       client.observations = observationResult.rows;
 
+      // Obtener audiencias
+      const hearingsResult = await pool.query({
+        text: `SELECT hearing_id, hearing_date, hearing_location, attendees, notes, created_at, updated_at 
+               FROM HEARINGS 
+               WHERE client_id = $1 
+               ORDER BY hearing_date ASC`,
+        values: [client.id],
+      });
+      client.hearings = hearingsResult.rows;
+
       return client;
     });
 
@@ -63,7 +73,8 @@ export const getAllClients = asyncHandler(async (
     logSuccess("✅ Successfully retrieved and enriched all clients", {
       clientCount: enrichedClients.length,
       totalContacts: enrichedClients.reduce((acc, client) => acc + client.contact_numbers.length, 0),
-      totalObservations: enrichedClients.reduce((acc, client) => acc + client.observations.length, 0)
+      totalObservations: enrichedClients.reduce((acc, client) => acc + client.observations.length, 0),
+      totalHearings: enrichedClients.reduce((acc, client) => acc + (client.hearings?.length || 0), 0)
     });
 
     return res.status(200).json({
@@ -107,7 +118,7 @@ export const getClientById = asyncHandler(async (
         court_name, 
         criminal_case, 
         defendant_name as name, 
-        hearing_date, 
+        placement_date, 
         investigation_file_number, 
         judge_name, 
         lawyer_name, 
@@ -156,11 +167,22 @@ export const getClientById = asyncHandler(async (
     });
     client.observations = observationResult.rows;
 
+    // Obtener audiencias del cliente
+    const hearingsResult = await pool.query({
+      text: `SELECT hearing_id, hearing_date, hearing_location, attendees, notes, created_at, updated_at 
+             FROM HEARINGS 
+             WHERE client_id = $1 
+             ORDER BY hearing_date ASC`,
+      values: [client_id],
+    });
+    client.hearings = hearingsResult.rows;
+
     logSuccess("✅ Client retrieved successfully", {
       clientId: client_id,
       clientName: client.name,
       contactsCount: client.contact_numbers.length,
-      observationsCount: client.observations.length
+      observationsCount: client.observations.length,
+      hearingsCount: client.hearings.length
     });
 
     return res.status(200).json({
@@ -191,7 +213,8 @@ export const createClient = asyncHandler(async (
     lawyer_name,
     signer_name,
     contact_numbers,
-    hearing_date,
+    placement_date,
+    hearings,
     contract_date,
     contract_document,
     contract_duration,
@@ -247,7 +270,7 @@ export const createClient = asyncHandler(async (
 
     // Insertar cliente con timestamp de registro automático
     const clientQuery = {
-      text: "INSERT INTO CLIENTS(contract_number, contract_folio, bracelet_type, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, hearing_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, status, prospect_id, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP) RETURNING client_id",
+      text: "INSERT INTO CLIENTS(contract_number, contract_folio, bracelet_type, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, placement_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, status, prospect_id, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP) RETURNING client_id",
       values: [
         contract_number || null,
         contract_folio || null,
@@ -259,7 +282,7 @@ export const createClient = asyncHandler(async (
         court_name,
         lawyer_name,
         signer_name,
-        new Date(hearing_date).toISOString().split('T')[0],
+        placement_date ? new Date(placement_date).toISOString().split('T')[0] : null,
         contractDateOptional,
         contract_document || null,
         contract_duration || null,
@@ -317,6 +340,34 @@ export const createClient = asyncHandler(async (
       logSuccess("✅ Client observations inserted", { 
         clientId: clientId,
         observationsCount: observations.length 
+      });
+    }
+
+    // Insertar audiencias
+    if (hearings && Array.isArray(hearings) && hearings.length > 0) {
+      logInfo("🏛️ Inserting client hearings", { 
+        clientId: clientId,
+        hearingsCount: hearings.length 
+      });
+
+      const hearingQueries = hearings.map((hearing: any) => {
+        const formattedHearingDate = new Date(hearing.hearing_date).toISOString().split('T')[0];
+        return pool.query({
+          text: "INSERT INTO HEARINGS(client_id, hearing_date, hearing_location, attendees, notes) VALUES($1, $2, $3, $4, $5)",
+          values: [
+            clientId, 
+            formattedHearingDate, 
+            hearing.hearing_location, 
+            hearing.attendees || [], 
+            hearing.notes || null
+          ],
+        });
+      });
+      await Promise.all(hearingQueries);
+      
+      logSuccess("✅ Client hearings inserted", { 
+        clientId: clientId,
+        hearingsCount: hearings.length 
       });
     }
 
@@ -387,7 +438,7 @@ export const createClient = asyncHandler(async (
         lawyer_name,
         signer_name,
         contact_numbers,
-        hearing_date,
+        placement_date: placement_date ? new Date(placement_date).toISOString().split('T')[0] : null,
         contract_date: contractDateOptional,
         contract_document,
         contract_duration,
@@ -422,7 +473,8 @@ export const updateClient = asyncHandler(async (
     lawyer_name,
     signer_name,
     contact_numbers,
-    hearing_date,
+    placement_date,
+    hearings,
     contract_date,
     contract_document,
     contract_duration,
@@ -503,7 +555,7 @@ export const updateClient = asyncHandler(async (
     // Actualizar cliente
     logInfo("💾 Updating client data", { clientId: client_id });
     const clientQuery = {
-      text: "UPDATE CLIENTS SET contract_number=$1, contract_folio=$2, bracelet_type=$3, defendant_name=$4, criminal_case=$5, investigation_file_number=$6, judge_name=$7, court_name=$8, lawyer_name=$9, signer_name=$10, hearing_date=$11, contract_date=$12, contract_document=$13, contract_duration=$14, payment_day=$15, payment_frequency=$16, status=$17 WHERE client_id = $18 RETURNING *",
+      text: "UPDATE CLIENTS SET contract_number=$1, contract_folio=$2, bracelet_type=$3, defendant_name=$4, criminal_case=$5, investigation_file_number=$6, judge_name=$7, court_name=$8, lawyer_name=$9, signer_name=$10, placement_date=$11, contract_date=$12, contract_document=$13, contract_duration=$14, payment_day=$15, payment_frequency=$16, status=$17 WHERE client_id = $18 RETURNING *",
       values: [
         contract_number || null,
         contract_folio || null,
@@ -515,7 +567,7 @@ export const updateClient = asyncHandler(async (
         court_name,
         lawyer_name,
         signer_name,
-        new Date(hearing_date).toISOString().split('T')[0],
+        placement_date ? new Date(placement_date).toISOString().split('T')[0] : null,
         contractDateForUpdate,
         contract_document || null,
         contract_duration || null,
@@ -550,7 +602,7 @@ export const updateClient = asyncHandler(async (
         { name: 'court_name', old: currentClient.court_name, new: court_name },
         { name: 'lawyer_name', old: currentClient.lawyer_name, new: lawyer_name },
         { name: 'signer_name', old: currentClient.signer_name, new: signer_name },
-        { name: 'hearing_date', old: currentClient.hearing_date?.toISOString().split('T')[0], new: new Date(hearing_date).toISOString().split('T')[0] },
+        { name: 'placement_date', old: currentClient.placement_date?.toISOString().split('T')[0], new: placement_date ? new Date(placement_date).toISOString().split('T')[0] : null },
         { name: 'contract_date', old: currentClient.contract_date?.toISOString().split('T')[0], new: contractDateForUpdate },
         { name: 'contract_document', old: currentClient.contract_document, new: contract_document },
         { name: 'contract_duration', old: currentClient.contract_duration, new: contract_duration },
@@ -708,11 +760,83 @@ export const updateClient = asyncHandler(async (
       }
     }
 
+    // Actualizar audiencias
+    if (hearings && Array.isArray(hearings)) {
+      logInfo("🏛️ Updating client hearings", { 
+        clientId: client_id,
+        newHearingsCount: hearings.length 
+      });
+
+      // Registrar eliminación de audiencias existentes
+      if ((req as any).user) {
+        const currentHearingsResult = await pool.query({
+          text: "SELECT COUNT(*) as count FROM HEARINGS WHERE client_id = $1",
+          values: [client_id],
+        });
+        const currentHearingsCount = parseInt(currentHearingsResult.rows[0].count);
+        
+        if (currentHearingsCount > 0) {
+          await logClientChange({
+            client_id,
+            user_id: (req as any).user.id,
+            user_name: (req as any).user.name || (req as any).user.email,
+            action_type: 'HEARING_DELETE',
+            old_value: `${currentHearingsCount} audiencia(s) eliminada(s)`,
+            ip_address: (req as any).clientIp,
+            user_agent: req.headers['user-agent'],
+          });
+        }
+      }
+
+      // Eliminar audiencias existentes
+      await pool.query({
+        text: "DELETE FROM HEARINGS WHERE client_id = $1",
+        values: [client_id],
+      });
+
+      // Insertar nuevas audiencias
+      if (hearings.length > 0) {
+        const hearingQueries = hearings.map((hearing: any) => {
+          const formattedHearingDate = new Date(hearing.hearing_date).toISOString().split('T')[0];
+          return pool.query({
+            text: "INSERT INTO HEARINGS(client_id, hearing_date, hearing_location, attendees, notes) VALUES($1, $2, $3, $4, $5)",
+            values: [
+              client_id, 
+              formattedHearingDate, 
+              hearing.hearing_location, 
+              hearing.attendees || [], 
+              hearing.notes || null
+            ],
+          });
+        });
+        await Promise.all(hearingQueries);
+
+        logSuccess("✅ Client hearings updated", { 
+          clientId: client_id,
+          hearingsCount: hearings.length 
+        });
+
+        // Registrar adición de nuevas audiencias
+        if ((req as any).user) {
+          await logClientChange({
+            client_id,
+            user_id: (req as any).user.id,
+            user_name: (req as any).user.name || (req as any).user.email,
+            action_type: 'HEARING_UPDATE',
+            new_value: `${hearings.length} audiencia(s) actualizada(s)`,
+            ip_address: (req as any).clientIp,
+            user_agent: req.headers['user-agent'],
+          });
+        }
+      }
+    }
+
     logSuccess("🎉 Client update completed successfully", {
       clientId: client_id,
       defendantName: defendant_name,
       totalContacts: contact_numbers?.length || 0,
-      totalObservations: observations?.length || 0
+      totalObservations: observations?.length || 0,
+      totalHearings: hearings?.length || 0
     });
 
     return res.status(200).json({
@@ -1038,7 +1162,7 @@ export const uninstallClient = async (
     // Obtener los datos actualizados del cliente con contactos y observaciones
     const enrichedClientQuery = {
       text: `SELECT client_id as id, contract_number, contract_folio, bracelet_type, court_name, criminal_case, 
-                    defendant_name as name, hearing_date, investigation_file_number, 
+                    defendant_name as name, placement_date, investigation_file_number, 
                     judge_name, lawyer_name, prospect_id, signer_name, status, 
                     contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency 
              FROM CLIENTS WHERE client_id = $1`,
