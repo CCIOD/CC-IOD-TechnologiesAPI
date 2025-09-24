@@ -46,6 +46,26 @@ const contact_numbers = {
     'array.min': 'Debe haber al menos un contacto.',
   })
 };
+
+// Schema para audiencias
+const hearing_schema = Joi.object({
+  hearing_id: Joi.number().integer().positive().optional().strip(),
+  hearing_date: dateValidation("fecha de audiencia"),
+  hearing_location: stringValidation("lugar de audiencia"),
+  attendees: Joi.array().items(Joi.string().trim()).min(0).optional().default([]).messages({
+    'array.base': 'Los asistentes deben estar en un arreglo',
+  }),
+  notes: Joi.string().optional().allow('', null),
+  created_at: Joi.date().optional().strip(),
+  updated_at: Joi.date().optional().strip(),
+}).options({ stripUnknown: true });
+
+const hearings = {
+  hearings: Joi.array().items(hearing_schema).optional().messages({
+    'array.base': 'Las audiencias deben ser un arreglo válido',
+    'array.items': 'Cada audiencia debe tener una estructura válida'
+  })
+};
 const relationship_id = {
   relationship_id: fieldIdValidation({
     field: "parentesco",
@@ -105,7 +125,8 @@ export const clientSchema = Joi.object({
   lawyer_name: stringValidation("El nombre del Abogado"),
   signer_name: stringValidation("El nombre de quién firma el contrato"),
   ...contact_numbers,
-  hearing_date: dateValidation("fecha de audiencia"),
+  placement_date: dateValidation("fecha de colocación").optional(),
+  ...hearings,
   contract_date: Joi.date().iso().optional().allow('', null).messages({
     'date.base': 'La fecha del contrato debe ser una fecha válida.',
     'date.isoDate': 'El formato de la fecha del contrato debe ser válido (YYYY-MM-DD o ISO 8601).',
@@ -166,7 +187,40 @@ export const registerSchema = Joi.object({
 export const updateUserSchema = Joi.object({
   ...name,
   ...roleIdValidation,
-  ...email,
+});
+
+// --------------- HEARINGS ------------------------------
+
+export const createHearingSchema = Joi.object({
+  client_id: fieldIdValidation({
+    field: "cliente",
+    req: "Debe especificar el ID del cliente para la audiencia.",
+  }),
+  hearing_date: dateValidation("fecha de audiencia"),
+  hearing_location: stringValidation("lugar de audiencia"),
+  attendees: Joi.array().items(Joi.string().trim()).min(0).required().messages({
+    'array.base': 'Los asistentes deben estar en un arreglo',
+    'any.required': 'La lista de asistentes es requerida.',
+  }),
+  notes: Joi.string().optional().allow('', null),
+});
+
+export const updateHearingSchema = Joi.object({
+  hearing_date: dateValidation("fecha de audiencia").optional(),
+  hearing_location: stringValidation("lugar de audiencia").optional(),
+  attendees: Joi.array().items(Joi.string().trim()).min(0).optional().messages({
+    'array.base': 'Los asistentes deben estar en un arreglo',
+  }),
+  notes: Joi.string().optional().allow('', null),
+});
+
+export const hearingParamsSchema = Joi.object({
+  hearing_id: Joi.number().integer().positive().required().messages({
+    'number.base': 'El ID de la audiencia debe ser un número',
+    'number.integer': 'El ID de la audiencia debe ser un número entero',
+    'number.positive': 'El ID de la audiencia debe ser positivo',
+    'any.required': 'El ID de la audiencia es requerido',
+  }),
 });
 export const updateAdminSchema = Joi.object({ ...name });
 export const loginSchema = Joi.object({ ...email, ...passwordValidation });
