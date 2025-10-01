@@ -16,7 +16,7 @@ const upload = multer({
     cb(null, true);
   },
   limits: {
-    fileSize: 20000000, // 20 MB
+    fileSize: 50000000, // 20 MB
   },
 });
 export const uploadContractFile = upload.single("contract");
