@@ -24,8 +24,8 @@ const messageArrValues = (message: string): string => {
   if (message.includes("phone_number")) {
     return "El número de teléfono del contacto es obligatorio";
   }
-  if (message.includes("relationship_id")) {
-    return "Debe especificar la relación del contacto (Familiar, Abogado, etc.)";
+  if (message.includes("relationship")) {
+    return "Debe especificar la relación del contacto (Familiar, Amigo, Abogado, etc.)";
   }
   if (message.includes("act_title")) {
     return "El título del acta es obligatorio";

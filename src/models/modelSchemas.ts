@@ -19,24 +19,16 @@ const name = { name: stringValidation() };
 const email = { email: emailValidation };
 const contact_schema = Joi.object({
   contact_name: stringValidation("nombre del contacto"),
-  relationship_id: Joi.alternatives()
-    .try(
-      Joi.number().integer().positive(),
-      Joi.string().pattern(/^\d+$/).custom((value, helpers) => {
-        const num = parseInt(value, 10);
-        if (isNaN(num) || num <= 0) {
-          return helpers.error('any.invalid');
-        }
-        return num;
-      })
-    )
+  relationship: Joi.string()
+    .max(100)
     .optional()
+    .allow('', null)
+    .default('Familiar')
     .messages({
-      'alternatives.match': 'El ID de parentesco debe ser un número positivo',
-      'any.invalid': 'El ID de parentesco debe ser un número válido',
+      'string.base': 'La relación debe ser texto',
+      'string.max': 'La relación no puede exceder 100 caracteres',
     }),
   phone_number: phoneValidation,
-  relationship_name: Joi.string().optional().allow(null, ''),
 });
 
 const contact_numbers = { 
@@ -66,13 +58,6 @@ const hearings = {
     'array.items': 'Cada audiencia debe tener una estructura válida'
   })
 };
-const relationship_id = {
-  relationship_id: fieldIdValidation({
-    field: "parentesco",
-    allowedValues: [1, 2],
-    allowedMsg: "Familiar o Abogado",
-  }),
-};
 
 const observationSchema = Joi.object({
   date: dateValidation("fecha de la observación"),
@@ -83,7 +68,7 @@ export const prospectSchema = Joi.object({
   ...name,
   ...email,
   phone: phoneValidation,
-  ...relationship_id,
+  relationship: Joi.string().max(100).optional().allow(null, ''),
   status: statusValidation({
     allowedValues: ["Pendiente", "Aprobado"],
     field: "estado",
@@ -177,7 +162,7 @@ export const carrierSchema = Joi.object({
     field: "cliente",
     req: "Debe haber un cliente a la cuál definir como portador.",
   }),
-  ...relationship_id,
+  relationship: Joi.string().max(100).optional().allow(null, ''),
 });
 
 // --------------- AUTH ------------------------------

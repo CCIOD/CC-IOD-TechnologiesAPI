@@ -22,7 +22,7 @@ export const getAllCarriers = async (
         installer_name, 
         A.observations as carrier_observations, 
         A.client_id, 
-        A.relationship_id, 
+        A.relationship, 
         B.defendant_name as name,
         B.contract_number,
         B.criminal_case,
@@ -37,11 +37,9 @@ export const getAllCarriers = async (
         B.contract_duration,
         B.payment_day,
         B.status as client_status,
-        B.contract,
-        C.name as relationship_name 
+        B.contract
       FROM CARRIERS A 
       INNER JOIN CLIENTS B ON A.client_id = B.client_id 
-      INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id 
       ORDER BY A.placement_date DESC`;
     
     const result = await pool.query(query);
@@ -55,9 +53,8 @@ export const getAllCarriers = async (
       result.rows.map(async (carrier: any) => {
         // Obtener contactos del cliente
         const contactResult = await pool.query({
-          text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+          text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
                  FROM CLIENT_CONTACTS cc 
-                 LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
                  WHERE cc.client_id = $1`,
           values: [carrier.client_id],
         });
@@ -119,7 +116,7 @@ export const createCarrier = async (
     installer_name,
     observations,
     client_id,
-    relationship_id,
+    relationship,
   } = req.body;
   try {
     const obserOptional = observations ? observations : "";
@@ -153,7 +150,7 @@ export const createCarrier = async (
           INSERT INTO CARRIERS (
             residence_area, placement_date, placement_time, electronic_bracelet, 
             beacon, wireless_charger, information_emails, contact_numbers, 
-            house_arrest, installer_name, observations, client_id, relationship_id
+            house_arrest, installer_name, observations, client_id, relationship
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
           RETURNING *
         ) 
@@ -171,7 +168,7 @@ export const createCarrier = async (
           A.installer_name, 
           A.observations, 
           A.client_id, 
-          A.relationship_id, 
+          A.relationship, 
           B.defendant_name AS name,
           B.contract_number,
           B.criminal_case,
@@ -186,11 +183,9 @@ export const createCarrier = async (
           B.contract_duration,
           B.payment_day,
           B.status as client_status,
-          B.contract,
-          C.name AS relationship_name 
+          B.contract
         FROM inserted A 
-        INNER JOIN CLIENTS B ON A.client_id = B.client_id 
-        INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id`,
+        INNER JOIN CLIENTS B ON A.client_id = B.client_id`,
       values: [
         residence_area,
         placement_date,
@@ -204,7 +199,7 @@ export const createCarrier = async (
         installer_name,
         obserOptional,
         client_id,
-        relationship_id,
+        relationship || 'Familiar',
       ],
     };
     const result = await pool.query(query);
@@ -249,12 +244,12 @@ export const createCarrier = async (
       for (const contact of contact_numbers) {
         if (contact.contact_name && contact.phone_number) {
           await pool.query({
-            text: "INSERT INTO CLIENT_CONTACTS (client_id, contact_name, phone_number, relationship_id) VALUES ($1, $2, $3, $4)",
+            text: "INSERT INTO CLIENT_CONTACTS (client_id, contact_name, phone_number, relationship) VALUES ($1, $2, $3, $4)",
             values: [
               client_id, 
               contact.contact_name, 
               contact.phone_number, 
-              contact.relationship_id || null
+              contact.relationship || 'Familiar'
             ],
           });
         }
@@ -263,9 +258,8 @@ export const createCarrier = async (
 
     // Obtener contactos y observaciones del cliente
     const contactResult = await pool.query({
-      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
              FROM CLIENT_CONTACTS cc 
-             LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
              WHERE cc.client_id = $1`,
       values: [client_id],
     });
@@ -313,7 +307,7 @@ export const updateCarrier = async (
     house_arrest,
     installer_name,
     observations,
-    relationship_id,
+    relationship,
   } = req.body;
   try {
     const obserOptional = observations ? observations : "";
@@ -327,12 +321,12 @@ export const updateCarrier = async (
             residence_area=$1, placement_date=$2, placement_time=$3, 
             electronic_bracelet=$4, beacon=$5, wireless_charger=$6, 
             information_emails=$7, contact_numbers=$8, house_arrest=$9, 
-            installer_name=$10, observations=$11, relationship_id=$12 
+            installer_name=$10, observations=$11, relationship=$12 
           WHERE carrier_id=$13 
           RETURNING carrier_id, residence_area, placement_date, placement_time, 
                    electronic_bracelet, beacon, wireless_charger, information_emails, 
                    contact_numbers, house_arrest, installer_name, observations, 
-                   relationship_id, client_id
+                   relationship, client_id
         )
         SELECT 
           A.carrier_id AS id, 
@@ -348,7 +342,7 @@ export const updateCarrier = async (
           A.installer_name, 
           A.observations, 
           A.client_id, 
-          A.relationship_id, 
+          A.relationship, 
           B.defendant_name AS name,
           B.contract_number,
           B.criminal_case,
@@ -363,11 +357,9 @@ export const updateCarrier = async (
           B.contract_duration,
           B.payment_day,
           B.status as client_status,
-          B.contract,
-          C.name AS relationship_name 
+          B.contract
         FROM updated A 
-        INNER JOIN CLIENTS B ON A.client_id = B.client_id 
-        INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id`,
+        INNER JOIN CLIENTS B ON A.client_id = B.client_id`,
       values: [
         residence_area,
         placement_date,
@@ -380,7 +372,7 @@ export const updateCarrier = async (
         house_arrest,
         installer_name,
         obserOptional,
-        relationship_id,
+        relationship || 'Familiar',
         carrier_id,
       ],
     };
@@ -423,12 +415,12 @@ export const updateCarrier = async (
       for (const contact of contact_numbers) {
         if (contact.contact_name && contact.phone_number) {
           await pool.query({
-            text: "INSERT INTO CLIENT_CONTACTS (client_id, contact_name, phone_number, relationship_id) VALUES ($1, $2, $3, $4)",
+            text: "INSERT INTO CLIENT_CONTACTS (client_id, contact_name, phone_number, relationship) VALUES ($1, $2, $3, $4)",
             values: [
               carrierData.client_id, 
               contact.contact_name, 
               contact.phone_number, 
-              contact.relationship_id || null
+              contact.relationship || 'Familiar'
             ],
           });
         }
@@ -437,9 +429,8 @@ export const updateCarrier = async (
 
     // Obtener contactos y observaciones del cliente
     const contactResult = await pool.query({
-      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
              FROM CLIENT_CONTACTS cc 
-             LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
              WHERE cc.client_id = $1`,
       values: [carrierData.client_id],
     });

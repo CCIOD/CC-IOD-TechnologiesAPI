@@ -41,8 +41,7 @@ export interface IClient {
 export interface IContactNumber {
   contact_name: string;
   phone_number: string;
-  relationship_id?: number;
-  relationship_name?: string;
+  relationship?: string; // Cambiado de relationship_id a texto libre
 }
 
 export interface IObservation {

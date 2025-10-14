@@ -40,9 +40,8 @@ export const getAllClients = asyncHandler(async (
     const enrichmentQueries = clients.map(async (client: any) => {
       // Obtener contactos
       const contactResult = await pool.query({
-        text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+        text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
                FROM CLIENT_CONTACTS cc  
-               LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
                WHERE cc.client_id = $1`,
         values: [client.id],
       });
@@ -141,9 +140,8 @@ export const getClientById = asyncHandler(async (
 
     // Obtener contactos del cliente
     const contactResult = await pool.query({
-      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
              FROM CLIENT_CONTACTS cc 
-             LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
              WHERE cc.client_id = $1`,
       values: [client_id],
     });
@@ -284,8 +282,8 @@ export const createClient = asyncHandler(async (
 
       const contactQueries = contact_numbers.map((contact: any) => {
         return pool.query({
-          text: "INSERT INTO CLIENT_CONTACTS(client_id, contact_name, relationship_id, phone_number) VALUES($1, $2, $3, $4)",
-          values: [clientId, contact.contact_name, contact.relationship_id || null, contact.phone_number],
+          text: "INSERT INTO CLIENT_CONTACTS(client_id, contact_name, relationship, phone_number) VALUES($1, $2, $3, $4)",
+          values: [clientId, contact.contact_name, contact.relationship || 'Familiar', contact.phone_number],
         });
       });
       await Promise.all(contactQueries);
@@ -616,8 +614,8 @@ export const updateClient = asyncHandler(async (
       // Insertar nuevos contactos
       const contactQueries = contact_numbers.map((contact: any) => {
         return pool.query({
-          text: "INSERT INTO CLIENT_CONTACTS(client_id, contact_name, relationship_id, phone_number) VALUES($1, $2, $3, $4)",
-          values: [client_id, contact.contact_name, contact.relationship_id || null, contact.phone_number],
+          text: "INSERT INTO CLIENT_CONTACTS(client_id, contact_name, relationship, phone_number) VALUES($1, $2, $3, $4)",
+          values: [client_id, contact.contact_name, contact.relationship || 'Familiar', contact.phone_number],
         });
       });
       await Promise.all(contactQueries);
@@ -1045,9 +1043,8 @@ export const uninstallClient = async (
 
     // Obtener contactos
     const contactResult = await pool.query({
-      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+      text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
              FROM CLIENT_CONTACTS cc 
-             LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
              WHERE cc.client_id = $1`,
       values: [client_id],
     });
