@@ -11,7 +11,7 @@ export const getAllCarriers = async (
       SELECT 
         carrier_id as id, 
         residence_area, 
-        placement_date, 
+        A.placement_date as carrier_placement_date, 
         placement_time, 
         electronic_bracelet, 
         beacon, 
