@@ -11,7 +11,7 @@ export const getAllCarriers = async (
       SELECT 
         carrier_id as id, 
         residence_area, 
-        placement_date, 
+        A.placement_date as carrier_placement_date, 
         placement_time, 
         electronic_bracelet, 
         beacon, 
@@ -32,6 +32,7 @@ export const getAllCarriers = async (
         B.lawyer_name,
         B.signer_name,
         B.hearing_date,
+        B.placement_date as client_placement_date,
         B.contract_date,
         B.contract_document,
         B.contract_duration,
