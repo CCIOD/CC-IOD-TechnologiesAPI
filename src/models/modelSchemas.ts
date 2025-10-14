@@ -147,8 +147,12 @@ export const clientSchema = Joi.object({
       "Pendiente de colocación",
       "Colocado",
       "Desinstalado",
+      "Cancelado",
     ],
     field: "estado",
+  }),
+  cancellation_reason: Joi.string().optional().allow('', null).messages({
+    'string.base': 'El motivo de cancelación debe ser texto',
   }),
   observations: Joi.array().items(observationSchema).optional(),
   prospect_id: fieldIdValidation({
@@ -236,5 +240,69 @@ export const uninstallClientSchema = Joi.object({
 export const carrierActSchema = Joi.object({
   act_title: stringValidation("título del acta").max(255),
   act_description: stringValidation("descripción del acta").optional().allow(''),
+});
+
+// Schemas para renovaciones de contrato
+export const createRenewalSchema = Joi.object({
+  client_id: fieldIdValidation({
+    field: "cliente",
+    req: "Debe especificar el ID del cliente para la renovación.",
+  }),
+  renewal_date: dateValidation("fecha de renovación"),
+  renewal_document: Joi.string().optional().allow('', null),
+  renewal_duration: stringValidation("duración de renovación").optional().allow('', null).max(50),
+  notes: Joi.string().optional().allow('', null),
+});
+
+export const updateRenewalSchema = Joi.object({
+  renewal_date: dateValidation("fecha de renovación").optional(),
+  renewal_document: Joi.string().optional().allow('', null),
+  renewal_duration: stringValidation("duración de renovación").optional().allow('', null).max(50),
+  notes: Joi.string().optional().allow('', null),
+}).min(1).messages({
+  'object.min': 'Debe proporcionar al menos un campo para actualizar',
+});
+
+export const renewalParamsSchema = Joi.object({
+  renewal_id: Joi.number().integer().positive().required().messages({
+    'number.base': 'El ID de la renovación debe ser un número',
+    'number.integer': 'El ID de la renovación debe ser un número entero',
+    'number.positive': 'El ID de la renovación debe ser positivo',
+    'any.required': 'El ID de la renovación es requerido',
+  }),
+});
+
+// Schemas para oficios de fiscalía
+export const createProsecutorDocSchema = Joi.object({
+  client_id: fieldIdValidation({
+    field: "cliente",
+    req: "Debe especificar el ID del cliente para el oficio.",
+  }),
+  document_type: stringValidation("tipo de documento").max(100),
+  document_number: stringValidation("número de documento").optional().allow('', null).max(50),
+  issue_date: dateValidation("fecha de emisión"),
+  document_file: Joi.string().optional().allow('', null),
+  prosecutor_office: stringValidation("fiscalía emisora").optional().allow('', null).max(200),
+  notes: Joi.string().optional().allow('', null),
+});
+
+export const updateProsecutorDocSchema = Joi.object({
+  document_type: stringValidation("tipo de documento").optional().max(100),
+  document_number: stringValidation("número de documento").optional().allow('', null).max(50),
+  issue_date: dateValidation("fecha de emisión").optional(),
+  document_file: Joi.string().optional().allow('', null),
+  prosecutor_office: stringValidation("fiscalía emisora").optional().allow('', null).max(200),
+  notes: Joi.string().optional().allow('', null),
+}).min(1).messages({
+  'object.min': 'Debe proporcionar al menos un campo para actualizar',
+});
+
+export const prosecutorDocParamsSchema = Joi.object({
+  prosecutor_doc_id: Joi.number().integer().positive().required().messages({
+    'number.base': 'El ID del oficio debe ser un número',
+    'number.integer': 'El ID del oficio debe ser un número entero',
+    'number.positive': 'El ID del oficio debe ser positivo',
+    'any.required': 'El ID del oficio es requerido',
+  }),
 });
 // 107

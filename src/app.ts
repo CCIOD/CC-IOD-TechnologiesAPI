@@ -8,6 +8,9 @@ import operationsRoutes from "./routes/operationsRoutes";
 import usersRoutes from "./routes/usersRoutes";
 import auditRoutes from "./routes/auditRoutes";
 import carrierActsRoutes from "./routes/carrierActsRoutes";
+import administrationRoutes from "./routes/administrationRoutes";
+import renewalRoutes from "./routes/renewalRoutes";
+import prosecutorDocsRoutes from "./routes/prosecutorDocsRoutes";
 import cors from "cors";
 import path from "path";
 import { requestLoggingMiddleware } from "./middlewares/loggingMiddleware";
@@ -87,7 +90,10 @@ app.get("/api/info", (req, res) => {
       "/operations",
       "/users",
       "/audit",
-      "/carrier-acts"
+      "/carrier-acts",
+      "/administration",
+      "/renewals",
+      "/prosecutor-docs"
     ]
   });
 });
@@ -101,6 +107,9 @@ app.use("/operations", operationsRoutes);
 app.use("/users", usersRoutes);
 app.use("/audit", auditRoutes);
 app.use("/carrier-acts", carrierActsRoutes);
+app.use("/administration", administrationRoutes);
+app.use("/renewals", renewalRoutes);
+app.use("/prosecutor-docs", prosecutorDocsRoutes);
 
 // 404 handler
 app.use("*", (req, res) => {

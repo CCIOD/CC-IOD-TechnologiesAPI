@@ -62,37 +62,13 @@ export const requestLoggingMiddleware = (
   const timestamp = getTimestamp();
   const methodColor = getMethodColor(req.method);
   
-  // Log incoming request
+  // Log incoming request (simplified)
   console.log(
     `${colors.dim}[${timestamp}]${colors.reset} ` +
     `${methodColor}${req.method}${colors.reset} ` +
     `${colors.cyan}${req.originalUrl}${colors.reset} ` +
     `${colors.dim}- Started${colors.reset}`
   );
-
-  // Log request body for POST/PUT/PATCH requests (excluding sensitive data)
-  if (["POST", "PUT", "PATCH"].includes(req.method) && isSafeObject(req.body) && Object.keys(req.body).length > 0) {
-    const sanitizedBody = { ...req.body };
-    // Remove sensitive fields
-    delete sanitizedBody.password;
-    delete sanitizedBody.token;
-    delete sanitizedBody.authorization;
-    
-    console.log(
-      `${colors.dim}[${timestamp}]${colors.reset} ` +
-      `${colors.blue}BODY:${colors.reset} ` +
-      `${colors.dim}${JSON.stringify(sanitizedBody, null, 2)}${colors.reset}`
-    );
-  }
-
-  // Log query parameters if present
-  if (isSafeObject(req.query) && Object.keys(req.query).length > 0) {
-    console.log(
-      `${colors.dim}[${timestamp}]${colors.reset} ` +
-      `${colors.magenta}QUERY:${colors.reset} ` +
-      `${colors.dim}${JSON.stringify(req.query)}${colors.reset}`
-    );
-  }
 
   // Override res.json to log response
   const originalJson = res.json;
@@ -101,7 +77,7 @@ export const requestLoggingMiddleware = (
     const statusColor = getStatusColor(res.statusCode);
     const completedTimestamp = getTimestamp();
     
-    // Log response
+    // Log response (simplified - only status and duration)
     console.log(
       `${colors.dim}[${completedTimestamp}]${colors.reset} ` +
       `${methodColor}${req.method}${colors.reset} ` +
@@ -110,12 +86,11 @@ export const requestLoggingMiddleware = (
       `${colors.dim}- Completed in ${duration}ms${colors.reset}`
     );
 
-    // Log response body for errors or when in development
-    const isDevelopment = process.env.NODE_ENV !== "production";
-    if (res.statusCode >= 400 || isDevelopment) {
+    // Only log response body for errors (4xx, 5xx)
+    if (res.statusCode >= 400) {
       console.log(
         `${colors.dim}[${completedTimestamp}]${colors.reset} ` +
-        `${colors.red}RESPONSE:${colors.reset} ` +
+        `${colors.red}ERROR RESPONSE:${colors.reset} ` +
         `${colors.dim}${JSON.stringify(body, null, 2)}${colors.reset}`
       );
     }
