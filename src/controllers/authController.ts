@@ -6,46 +6,66 @@ import { IUser } from "../models/user.interface";
 import jwt from "jsonwebtoken";
 import { sendEmail } from "../helpers/sendEmail";
 import { lowercase } from "../helpers/helpers";
+import { logError, logSuccess, logInfo, logWarning } from "../middlewares/loggingMiddleware";
+import { asyncHandler } from "../middlewares/enhancedMiddlewares";
+
 const JWT_SECRET = process.env.JWT_SECRET || "default-secret";
 
 const validateUser = async (): Promise<boolean> => {
   try {
+    logInfo("Checking if admin user exists");
     const query = "SELECT 1 FROM USERS WHERE role_id = 1 LIMIT 1";
     const res = await pool.query(query);
-    return (res.rowCount ?? 0) > 0;
+    const hasAdmin = (res.rowCount ?? 0) > 0;
+    logInfo(`Admin user exists: ${hasAdmin}`);
+    return hasAdmin;
   } catch (error) {
+    logError(error, "validateUser");
     throw error;
   }
 };
 
-export const register = async (
+export const register = asyncHandler(async (
   req: Request,
   res: Response,
   next: NextFunction
 ): Promise<Response | void> => {
   const { name, email, password }: IUser = req.body;
+  
+  logInfo("🔐 Admin registration attempt", { email: email?.toLowerCase() });
+  
   try {
     const isAdmin = await validateUser();
-    if (isAdmin)
+    if (isAdmin) {
+      logWarning("Registration blocked - Admin already exists");
       return res.status(400).json({ message: "Administrador ya registrado." });
+    }
+    
     const lowerEmail = lowercase(email);
     const role = 1;
     const hashedPassword = await hashPassword(password);
+    
+    logInfo("Creating new admin user", { email: lowerEmail });
+    
     const query = {
       text: "INSERT INTO USERS(name, email,password, role_id) VALUES($1, $2, $3, $4)",
       values: [name, lowerEmail, hashedPassword, role],
     };
+    
     await pool.query(query);
+    
+    logSuccess("Admin user registered successfully", { name, email: lowerEmail });
 
     return res.status(201).json({
       success: true,
-      data: { name, email },
+      data: { name, email: lowerEmail },
       message: "El administrador se ha registrado correctamente",
     });
   } catch (error: any) {
+    logError(error, "register");
     next(error);
   }
-};
+});
 
 export const login = async (
   req: Request,

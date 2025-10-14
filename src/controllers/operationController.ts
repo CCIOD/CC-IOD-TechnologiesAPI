@@ -36,7 +36,7 @@ export const getAllOperations = async (
         C.court_name,
         C.lawyer_name,
         C.signer_name,
-        C.hearing_date,
+        C.placement_date,
         C.contract_date,
         C.contract_document,
         C.contract_duration,

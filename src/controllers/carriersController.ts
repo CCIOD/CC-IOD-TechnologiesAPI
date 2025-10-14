@@ -31,8 +31,7 @@ export const getAllCarriers = async (
         B.court_name,
         B.lawyer_name,
         B.signer_name,
-        B.hearing_date,
-        B.placement_date as client_placement_date,
+        B.placement_date,
         B.contract_date,
         B.contract_document,
         B.contract_duration,
@@ -43,7 +42,7 @@ export const getAllCarriers = async (
       FROM CARRIERS A 
       INNER JOIN CLIENTS B ON A.client_id = B.client_id 
       INNER JOIN RELATIONSHIPS C ON A.relationship_id = C.relationship_id 
-      ORDER BY carrier_id`;
+      ORDER BY A.placement_date DESC`;
     
     const result = await pool.query(query);
     if (!result.rowCount)
@@ -181,7 +180,7 @@ export const createCarrier = async (
           B.court_name,
           B.lawyer_name,
           B.signer_name,
-          B.hearing_date,
+          B.placement_date,
           B.contract_date,
           B.contract_document,
           B.contract_duration,
@@ -358,7 +357,7 @@ export const updateCarrier = async (
           B.court_name,
           B.lawyer_name,
           B.signer_name,
-          B.hearing_date,
+          B.placement_date,
           B.contract_date,
           B.contract_document,
           B.contract_duration,

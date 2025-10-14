@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsnd --respawn --clear src/server.ts",
     "build": "rimraf ./dist && tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "setup:azure": "tsnd scripts/setup-azure-containers.ts"
   },
   "author": "jcarlosmariscal",
   "license": "ISC",

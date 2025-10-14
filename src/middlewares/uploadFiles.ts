@@ -16,9 +16,15 @@ const upload = multer({
     cb(null, true);
   },
   limits: {
-    fileSize: 20000000, // 20 MB
+    fileSize: 50000000, // 20 MB
   },
 });
+
+// Exportar el objeto upload para uso directo
+export { upload };
+
 export const uploadContractFile = upload.single("contract");
 export const uploadReportFile = upload.single("installation_report");
 export const uploadCarrierActFile = upload.single("act_document");
+export const uploadRenewalFile = upload.single("renewal_document");
+export const uploadProsecutorDocFile = upload.single("document_file");

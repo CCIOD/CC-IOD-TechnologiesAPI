@@ -5,6 +5,10 @@ import {
   prospectSchema,
   uninstallClientSchema,
   carrierActSchema,
+  createRenewalSchema,
+  updateRenewalSchema,
+  createProsecutorDocSchema,
+  updateProsecutorDocSchema,
 } from "../models/modelSchemas";
 
 const messageArrValues = (message: string): string => {
@@ -95,6 +99,60 @@ export const validationCarrierAct = (
   next: NextFunction
 ) => {
   const { error } = carrierActSchema.validate(req.body);
+  if (error) {
+    const message = messageArrValues(error.details[0].message);
+    return res.status(400).json({ success: false, message });
+  }
+  next();
+};
+
+// Validaciones para renovaciones de contrato
+export const validationCreateRenewal = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const { error } = createRenewalSchema.validate(req.body);
+  if (error) {
+    const message = messageArrValues(error.details[0].message);
+    return res.status(400).json({ success: false, message });
+  }
+  next();
+};
+
+export const validationUpdateRenewal = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const { error } = updateRenewalSchema.validate(req.body);
+  if (error) {
+    const message = messageArrValues(error.details[0].message);
+    return res.status(400).json({ success: false, message });
+  }
+  next();
+};
+
+// Validaciones para oficios de fiscalía
+export const validationCreateProsecutorDoc = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const { error } = createProsecutorDocSchema.validate(req.body);
+  if (error) {
+    const message = messageArrValues(error.details[0].message);
+    return res.status(400).json({ success: false, message });
+  }
+  next();
+};
+
+export const validationUpdateProsecutorDoc = (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  const { error } = updateProsecutorDocSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
     return res.status(400).json({ success: false, message });
