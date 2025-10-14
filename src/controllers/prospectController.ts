@@ -9,7 +9,7 @@ export const getAllProspects = async (
 ): Promise<Response | void> => {
   try {
     const prospectQuery =
-      "SELECT prospect_id as id, name, email, phone, date, status, relationship_id FROM PROSPECTS ORDER BY prospect_id";
+      "SELECT prospect_id as id, name, email, phone, date, status, relationship FROM PROSPECTS ORDER BY prospect_id";
     const prospectResult = await pool.query(prospectQuery);
 
     if (!prospectResult.rowCount)
@@ -46,15 +46,15 @@ export const createProspect = async (
   res: Response,
   next: NextFunction
 ): Promise<Response | void> => {
-  const { name, email, phone, relationship_id, status, date, observations } =
+  const { name, email, phone, relationship, status, date, observations } =
     req.body;
   try {
     const lowerEmail = lowercase(email);
 
     // Insertar prospecto
     const prospectQuery = {
-      text: "INSERT INTO PROSPECTS(name, email, phone, date, relationship_id, status) VALUES($1, $2, $3, $4, $5, $6) RETURNING prospect_id",
-      values: [name, lowerEmail, phone, date, relationship_id, status],
+      text: "INSERT INTO PROSPECTS(name, email, phone, date, relationship, status) VALUES($1, $2, $3, $4, $5, $6) RETURNING prospect_id",
+      values: [name, lowerEmail, phone, date, relationship || 'Familiar', status],
     };
     const prospectResult = await pool.query(prospectQuery);
     const prospectId = prospectResult.rows[0].prospect_id;
@@ -78,7 +78,7 @@ export const createProspect = async (
         name,
         email,
         phone,
-        relationship_id,
+        relationship,
         status,
         date,
         observations,
@@ -94,15 +94,15 @@ export const updateProspect = async (
   next: NextFunction
 ): Promise<Response | void> => {
   const prospect_id = parseInt(req.params.id);
-  const { name, email, phone, relationship_id, status, date, observations } =
+  const { name, email, phone, relationship, status, date, observations } =
     req.body;
   try {
     const lowerEmail = lowercase(email);
 
     // Actualizar prospecto
     const prospectQuery = {
-      text: "UPDATE PROSPECTS SET name=$1, email=$2, phone=$3, date=$4, relationship_id=$5, status=$6 WHERE prospect_id = $7 RETURNING *",
-      values: [name, lowerEmail, phone, date, relationship_id, status, prospect_id],
+      text: "UPDATE PROSPECTS SET name=$1, email=$2, phone=$3, date=$4, relationship=$5, status=$6 WHERE prospect_id = $7 RETURNING *",
+      values: [name, lowerEmail, phone, date, relationship || 'Familiar', status, prospect_id],
     };
     const prospectResult = await pool.query(prospectQuery);
 

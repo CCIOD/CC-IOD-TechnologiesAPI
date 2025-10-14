@@ -26,7 +26,7 @@ export const getAllOperations = async (
         B.house_arrest,
         B.installer_name,
         B.observations as carrier_observations,
-        B.relationship_id,
+        B.relationship,
         C.client_id,
         C.defendant_name as name,
         C.contract_number,
@@ -43,12 +43,10 @@ export const getAllOperations = async (
         C.payment_day,
         C.status as client_status,
         C.contract,
-        C.prospect_id,
-        R.name as relationship_name
+        C.prospect_id
       FROM OPERATIONS A 
       INNER JOIN CARRIERS B ON A.carrier_id = B.carrier_id 
       INNER JOIN CLIENTS C ON B.client_id = C.client_id 
-      LEFT JOIN RELATIONSHIPS R ON B.relationship_id = R.relationship_id
       ORDER BY A.operation_id`;
     
     const result = await pool.query(query);
@@ -62,9 +60,8 @@ export const getAllOperations = async (
       result.rows.map(async (operation: any) => {
         // Obtener contactos del cliente
         const contactResult = await pool.query({
-          text: `SELECT cc.contact_name, cc.phone_number, cc.relationship_id, r.name as relationship_name 
+          text: `SELECT cc.contact_name, cc.phone_number, cc.relationship
                  FROM CLIENT_CONTACTS cc 
-                 LEFT JOIN RELATIONSHIPS r ON cc.relationship_id = r.relationship_id 
                  WHERE cc.client_id = $1`,
           values: [operation.client_id],
         });
