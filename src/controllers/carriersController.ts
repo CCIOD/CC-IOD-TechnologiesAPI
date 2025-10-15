@@ -7,15 +7,16 @@ export const getAllCarriers = async (
   next: NextFunction
 ): Promise<Response | void> => {
   try {
-    const query = `SELECT 
-        A.carrier_id as id, 
-        A.residence_area, 
-        A.placement_date, 
-        A.placement_time, 
-        A.electronic_bracelet, 
-        A.beacon, 
-        A.wireless_charger, 
-        A.information_emails, 
+    const query = `
+      SELECT 
+        carrier_id as id, 
+        residence_area, 
+        A.placement_date as carrier_placement_date, 
+        placement_time, 
+        electronic_bracelet, 
+        beacon, 
+        wireless_charger, 
+        information_emails, 
         A.contact_numbers as carrier_contact_numbers, 
         A.house_arrest, 
         A.installer_name, 
