@@ -101,10 +101,7 @@ export const clientSchema = Joi.object({
   }),
   defendant_name: stringValidation("El nombre del imputado"),
   criminal_case: stringValidation("La causa penal"),
-  investigation_file_number: numberPositiveValidation(
-    "número de carpeta de investigación",
-    true
-  ),
+  investigation_file_number: stringValidation("El número de carpeta de investigación"),
   judge_name: stringValidation("El nombre del Juez"),
   court_name: stringValidation("El nombre del Juzgado"),
   lawyer_name: stringValidation("El nombre del Abogado"),
