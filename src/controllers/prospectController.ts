@@ -22,7 +22,7 @@ export const getAllProspects = async (
     // Obtener observaciones para cada prospecto
     const observationQueries = prospects.map(async (prospect: any) => {
       const observationResult = await pool.query({
-        text: "SELECT observation_date as date, observation FROM PROSPECT_OBSERVATIONS WHERE prospect_id = $1",
+        text: "SELECT observation_date as date, observation FROM PROSPECT_OBSERVATIONS WHERE prospect_id = $1 ORDER BY observation_date ASC",
         values: [prospect.id],
       });
       prospect.observations = observationResult.rows;
