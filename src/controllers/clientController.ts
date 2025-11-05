@@ -5,6 +5,7 @@ import { getBlobName } from "../helpers/helpers";
 import { logClientChange } from "../services/audit.service";
 import { logError, logSuccess, logInfo, logWarning } from "../middlewares/loggingMiddleware";
 import { asyncHandler } from "../middlewares/enhancedMiddlewares";
+import { renewContract, getContractValidity } from "../services/renewal.service";
 
 export const getAllClients = asyncHandler(async (
   req: Request,
@@ -49,7 +50,7 @@ export const getAllClients = asyncHandler(async (
 
       // Obtener observaciones
       const observationResult = await pool.query({
-        text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1",
+        text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date ASC",
         values: [client.id],
       });
       client.observations = observationResult.rows;
@@ -149,7 +150,7 @@ export const getClientById = asyncHandler(async (
 
     // Obtener observaciones del cliente
     const observationResult = await pool.query({
-      text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date DESC",
+      text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date ASC",
       values: [client_id],
     });
     client.observations = observationResult.rows;
@@ -1052,7 +1053,7 @@ export const uninstallClient = async (
 
     // Obtener observaciones
     const observationResult = await pool.query({
-      text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date DESC",
+      text: "SELECT observation_date as date, observation FROM CLIENT_OBSERVATIONS WHERE client_id = $1 ORDER BY observation_date ASC",
       values: [client_id],
     });
     clientData.observations = observationResult.rows;
@@ -1080,3 +1081,188 @@ export const uninstallClient = async (
     next(error);
   }
 };
+
+/**
+ * ============================================================================
+ * NUEVOS ENDPOINTS - VIGENCIA DE CONTRATO Y RENOVACIONES
+ * ============================================================================
+ */
+
+/**
+ * PUT /clientes/:id/renovar-contrato
+ * 
+ * Renueva el contrato de un cliente agregando meses adicionales
+ * 
+ * Flujo:
+ * 1. Calcula la fecha de vencimiento actual
+ * 2. Suma los meses nuevos
+ * 3. Registra la renovación en la tabla CONTRACT_RENEWALS
+ * 4. Actualiza los campos del cliente (months_contracted, contract_expiration_date)
+ * 5. Retorna la nueva vigencia
+ * 
+ * Payload esperado:
+ * {
+ *   "months_new": 6,
+ *   "renewal_document_url": "https://storage.azure.com/...",
+ *   "renewal_date": "2025-10-28"
+ * }
+ * 
+ * Respuesta esperada (200):
+ * {
+ *   "success": true,
+ *   "message": "Contrato renovado correctamente",
+ *   "data": {
+ *     "client_id": 123,
+ *     "new_expiration_date": "2026-10-28",
+ *     "total_months_contracted": 18,
+ *     "days_remaining": 365,
+ *     "previous_expiration_date": "2026-04-28",
+ *     "renewal_date": "2025-10-28",
+ *     "months_added": 6
+ *   }
+ * }
+ */
+export const renewContractEndpoint = asyncHandler(async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> => {
+  const clientId = parseInt(req.params.id);
+
+  logInfo("🔄 Renewing contract", {
+    clientId,
+    requestedBy: (req as any).user?.email || "Unknown",
+    monthsNew: req.body.months_new,
+  });
+
+  if (isNaN(clientId)) {
+    logWarning("❌ Invalid client ID provided", { providedId: req.params.id });
+    return res.status(400).json({
+      success: false,
+      message: "ID de cliente inválido",
+    });
+  }
+
+  try {
+    const response = await renewContract({
+      client_id: String(clientId),
+      months_new: req.body.months_new,
+      renewal_document_url: req.body.renewal_document_url,
+      renewal_date: req.body.renewal_date,
+    });
+
+    logSuccess("✅ Contract renewed successfully", {
+      clientId,
+      newExpirationDate: response.data.new_expiration_date,
+      monthsAdded: response.data.months_added,
+    });
+
+    return res.status(200).json(response);
+  } catch (error) {
+    logError(error, "renewContractEndpoint");
+    next(error);
+  }
+});
+
+/**
+ * GET /clientes/:id/vigencia
+ * 
+ * Obtiene la información de vigencia actual del contrato
+ * 
+ * Retorna:
+ * - Fecha de colocación
+ * - Fecha de vencimiento
+ * - Duración original del contrato (meses)
+ * - Total de meses contratados (incluye renovaciones)
+ * - Días restantes
+ * - Estado (activo/expirado)
+ * - Información de última renovación
+ * 
+ * Respuesta esperada (200):
+ * {
+ *   "success": true,
+ *   "message": "Vigencia del contrato",
+ *   "data": {
+ *     "client_id": 123,
+ *     "placement_date": "2025-01-01",
+ *     "contract_date": "2025-01-01",
+ *     "contract_duration": 12,
+ *     "expiration_date": "2026-01-01",
+ *     "months_contracted": 12,
+ *     "days_remaining": 128,
+ *     "is_active": true,
+ *     "last_renewal": {
+ *       "renewal_date": "2025-10-01",
+ *       "months_added": 6
+ *     }
+ *   }
+ * }
+ */
+export const getContractValidityEndpoint = asyncHandler(async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> => {
+  const clientId = parseInt(req.params.id);
+
+  logInfo("📅 Getting contract validity", {
+    clientId,
+    requestedBy: (req as any).user?.email || "Unknown",
+  });
+
+  if (isNaN(clientId)) {
+    logWarning("❌ Invalid client ID provided", { providedId: req.params.id });
+    return res.status(400).json({
+      success: false,
+      message: "ID de cliente inválido",
+    });
+  }
+
+  try {
+    const validity = await getContractValidity(clientId);
+
+    logSuccess("✅ Contract validity retrieved", {
+      clientId,
+      daysRemaining: validity.days_remaining,
+      isActive: validity.is_active,
+    });
+
+    // Convertir fechas a formato YYYY-MM-DD para consistencia
+    // Pero validar primero que sean fechas válidas
+    const responseData = {
+      ...validity,
+      placement_date: validity.placement_date === "N/A" 
+        ? "N/A"
+        : validity.placement_date instanceof Date
+          ? validity.placement_date.toISOString().split('T')[0]
+          : typeof validity.placement_date === 'string'
+            ? new Date(validity.placement_date).toISOString().split('T')[0]
+            : "N/A",
+      contract_date: validity.contract_date === "N/A"
+        ? "N/A"
+        : validity.contract_date instanceof Date
+          ? validity.contract_date.toISOString().split('T')[0]
+          : typeof validity.contract_date === 'string'
+            ? new Date(validity.contract_date).toISOString().split('T')[0]
+            : "N/A",
+      expiration_date: validity.expiration_date === "N/A"
+        ? "N/A"
+        : validity.expiration_date instanceof Date
+          ? validity.expiration_date.toISOString().split('T')[0]
+          : typeof validity.expiration_date === 'string'
+            ? new Date(validity.expiration_date).toISOString().split('T')[0]
+            : "N/A",
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Vigencia del contrato",
+      data: responseData,
+    });
+  } catch (error) {
+    logError(error, "getContractValidityEndpoint");
+    next(error);
+  }
+});
+
+
