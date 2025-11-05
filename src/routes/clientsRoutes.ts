@@ -11,6 +11,8 @@ import {
   updateClient,
   uploadContract,
   uninstallClient,
+  renewContractEndpoint,
+  getContractValidityEndpoint,
 } from "../controllers/clientController";
 import { errorMiddleware } from "../middlewares/errorMiddleware";
 import { validationFiles } from "../middlewares/validationFiles";
@@ -21,20 +23,21 @@ const router = express.Router();
 
 router.use(authenticateToken);
 router.use(extractUserInfo);
-router.get("/", getAllClients);
+
+// Rutas específicas PRIMERO (van antes de :id genérico)
 router.get("/approved-without-carrier/", getApprovedClientsWithoutCarrier);
+router.get("/:id/vigencia", getContractValidityEndpoint);
+router.put("/upload-contract/:id", uploadContractFile, uploadContract, validationFiles);
+router.put("/delete-contract/:id", deleteContract);
+router.put("/uninstall/:id", validationUninstallClient, uninstallClient);
+router.put("/:id/renovar-contrato", renewContractEndpoint);
+
+// Rutas genéricas DESPUÉS (van al final)
+router.get("/", getAllClients);
 router.get("/:id", getClientById);
 router.post("/", validationsClient, createClient);
 router.put("/:id", validationsClient, updateClient);
-router.put(
-  "/upload-contract/:id",
-  uploadContractFile,
-  uploadContract,
-  validationFiles
-);
 router.delete("/:id", deleteClient);
-router.put("/delete-contract/:id", deleteContract);
-router.put("/uninstall/:id", validationUninstallClient, uninstallClient);
 router.use(errorMiddleware);
 
 export default router;

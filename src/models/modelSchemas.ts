@@ -287,4 +287,226 @@ export const prosecutorDocParamsSchema = Joi.object({
     'any.required': 'El ID del oficio es requerido',
   }),
 });
+
+// --------------- PAYMENTS --------------------------------
+
+export const createPaymentSchema = Joi.object({
+  client_id: fieldIdValidation({
+    field: "cliente",
+    req: "Debe especificar el ID del cliente para el pago.",
+  }),
+  payment_date: dateValidation("fecha de pago"),
+  amount: Joi.number().positive().required().messages({
+    'number.base': 'El monto debe ser un número',
+    'number.positive': 'El monto debe ser mayor a 0',
+    'any.required': 'El monto es requerido',
+  }),
+  payment_type: stringValidation("tipo de pago").required(),
+  observations: Joi.string().optional().allow('', null).messages({
+    'string.base': 'Las observaciones deben ser texto',
+  }),
+});
+
+export const createPaymentAdminSchema = Joi.object({
+  client_id: fieldIdValidation({
+    field: "cliente",
+    req: "Debe especificar el ID del cliente.",
+  }).optional(), // client_id viene en params
+  payment_type: Joi.string()
+    .valid('Pago', 'Viático', 'Abono', 'Otro')
+    .optional()
+    .default('Pago')
+    .messages({
+      'any.only': 'El tipo debe ser uno de: Pago, Viático, Abono, Otro',
+    }),
+  scheduled_amount: Joi.alternatives()
+    .try(
+      Joi.number().positive(),
+      Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+    )
+    .optional()
+    .messages({
+      'alternatives.match': 'El importe debe ser un número positivo válido',
+    }),
+  scheduled_date: Joi.date().iso().optional().allow('', null).messages({
+    'date.base': 'La fecha programada debe ser una fecha válida',
+    'date.isoDate': 'El formato de fecha debe ser válido (YYYY-MM-DD)',
+  }),
+  paid_amount: Joi.alternatives()
+    .try(
+      Joi.number().min(0),
+      Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+    )
+    .optional()
+    .allow('', null),
+  paid_date: Joi.date().iso().optional().allow('', null),
+  payment_status: Joi.string()
+    .valid('Pendiente', 'Pagado', 'Parcial', 'Vencido', 'Cancelado')
+    .optional()
+    .messages({
+      'any.only': 'El estado debe ser uno de: Pendiente, Pagado, Parcial, Vencido, Cancelado',
+    }),
+  description: Joi.string().optional().allow('', null).max(500),
+  payment_method: Joi.string().optional().allow('', null),
+  reference_number: Joi.string().optional().allow('', null).max(100),
+  notes: Joi.string().optional().allow('', null),
+  // Campos en español
+  tipo: Joi.string().optional().allow('', null),
+  importeProgramado: Joi.alternatives()
+    .try(
+      Joi.number().positive(),
+      Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+    )
+    .optional(),
+  fechaProgramada: Joi.date().iso().optional().allow('', null),
+  importePagado: Joi.alternatives()
+    .try(
+      Joi.number().min(0),
+      Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+    )
+    .optional()
+    .allow('', null),
+  fechaPagoReal: Joi.date().iso().optional().allow('', null),
+  descripcion: Joi.string().optional().allow('', null).max(500),
+  metodoPago: Joi.string().optional().allow('', null),
+  numeroReferencia: Joi.string().optional().allow('', null).max(100),
+  notas: Joi.string().optional().allow('', null),
+}).min(1).messages({
+  'object.min': 'Debe proporcionar al menos un campo',
+});
+
+export const createPaymentAdminBatchSchema = Joi.object({
+  payments: Joi.array().items(
+    Joi.object({
+      payment_number: Joi.number().integer().positive().optional(),
+      scheduled_amount: Joi.alternatives()
+        .try(
+          Joi.number().positive(),
+          Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+        )
+        .required()
+        .messages({
+          'alternatives.match': 'El importe debe ser un número positivo válido',
+          'any.required': 'El importe programado es requerido',
+        }),
+      scheduled_date: dateValidation("fecha programada"),
+      payment_status: Joi.string()
+        .valid('Pendiente', 'Pagado', 'Parcial', 'Vencido', 'Cancelado')
+        .optional()
+        .default('Pendiente'),
+      paid_amount: Joi.alternatives()
+        .try(
+          Joi.number().min(0),
+          Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+        )
+        .optional()
+        .allow('', null),
+      paid_date: Joi.date().iso().optional().allow('', null),
+      description: Joi.string().optional().allow('', null).max(500),
+      payment_method: Joi.string().optional().allow('', null),
+      reference_number: Joi.string().optional().allow('', null).max(100),
+      notes: Joi.string().optional().allow('', null),
+      payment_type: Joi.string()
+        .valid('Pago', 'Viático', 'Abono', 'Otro')
+        .optional()
+        .default('Pago')
+        .messages({
+          'any.only': 'El tipo debe ser uno de: Pago, Viático, Abono, Otro',
+        }),
+    })
+  ).min(1).required().messages({
+    'array.base': 'Los pagos deben estar en un arreglo',
+    'array.min': 'Debe haber al menos un pago',
+    'any.required': 'Los pagos son requeridos',
+  }),
+});
+
+export const createBatchPaymentsSchema = Joi.object({
+  client_id: fieldIdValidation({
+    field: "cliente",
+    req: "Debe especificar el ID del cliente.",
+  }),
+  payments: Joi.array().items(
+    Joi.object({
+      payment_number: Joi.number().integer().positive().optional().messages({
+        'number.base': 'El número de pago debe ser un número',
+        'number.positive': 'El número de pago debe ser positivo',
+      }),
+      scheduled_amount: Joi.alternatives()
+        .try(
+          Joi.number().positive(),
+          Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+        )
+        .required()
+        .messages({
+          'alternatives.match': 'El importe debe ser un número positivo válido',
+          'any.required': 'El importe programado es requerido',
+        }),
+      scheduled_date: dateValidation("fecha programada"),
+      payment_status: Joi.string()
+        .valid('Pendiente', 'Pagado', 'Parcial', 'Vencido', 'Cancelado')
+        .optional()
+        .default('Pendiente')
+        .messages({
+          'any.only': 'El estado debe ser uno de: Pendiente, Pagado, Parcial, Vencido, Cancelado',
+        }),
+      paid_amount: Joi.alternatives()
+        .try(
+          Joi.number().min(0),
+          Joi.string().pattern(/^\d+(\.\d{1,2})?$/)
+        )
+        .optional()
+        .allow('', null)
+        .messages({
+          'number.base': 'El importe pagado debe ser un número',
+        }),
+      paid_date: Joi.date().iso().optional().allow('', null).messages({
+        'date.base': 'La fecha de pago debe ser una fecha válida',
+        'date.isoDate': 'El formato de fecha debe ser válido (YYYY-MM-DD)',
+      }),
+      description: Joi.string().optional().allow('', null).max(500).messages({
+        'string.base': 'La descripción debe ser texto',
+        'string.max': 'La descripción no puede exceder 500 caracteres',
+      }),
+      payment_method: Joi.string()
+        .optional()
+        .allow('', null)
+        .messages({
+          'string.base': 'El método de pago debe ser texto',
+        }),
+      reference_number: Joi.string().optional().allow('', null).max(100).messages({
+        'string.base': 'El número de referencia debe ser texto',
+        'string.max': 'El número de referencia no puede exceder 100 caracteres',
+      }),
+      notes: Joi.string().optional().allow('', null).messages({
+        'string.base': 'Las notas deben ser texto',
+      }),
+    })
+  ).min(1).required().messages({
+    'array.base': 'Los pagos deben estar en un arreglo',
+    'array.min': 'Debe haber al menos un pago',
+    'any.required': 'Los pagos son requeridos',
+  }),
+});
+
+export const updatePaymentSchema = Joi.object({
+  payment_date: dateValidation("fecha de pago").optional(),
+  amount: Joi.number().positive().optional().messages({
+    'number.base': 'El monto debe ser un número',
+    'number.positive': 'El monto debe ser mayor a 0',
+  }),
+  payment_type: stringValidation("tipo de pago").optional(),
+  observations: Joi.string().optional().allow('', null),
+}).min(1).messages({
+  'object.min': 'Debe proporcionar al menos un campo para actualizar',
+});
+
+export const paymentParamsSchema = Joi.object({
+  payment_id: Joi.number().integer().positive().required().messages({
+    'number.base': 'El ID del pago debe ser un número',
+    'number.integer': 'El ID del pago debe ser un número entero',
+    'number.positive': 'El ID del pago debe ser positivo',
+    'any.required': 'El ID del pago es requerido',
+  }),
+});
 // 107

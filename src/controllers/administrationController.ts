@@ -45,7 +45,16 @@ export const getAllClients = async (
       : '';
 
     const query = `
-      WITH client_financials AS (
+      WITH last_renewals AS (
+        -- Obtener la última renovación por cliente
+        SELECT 
+          client_id,
+          renewal_date,
+          renewal_duration,
+          ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY renewal_date DESC) as rn
+        FROM CONTRACT_RENEWALS
+      ),
+      client_financials AS (
         SELECT 
           c.client_id,
           c.contract_number as "numeroContrato",
@@ -54,6 +63,7 @@ export const getAllClients = async (
           c.placement_date as "fechaColocacion",
           c.contract_duration as "periodoContratacion",
           c.status as estado,
+          c.bracelet_type as "tipoBrazalete",
           c.cancellation_reason as "motivoCancelacion",
           c.contract_document as "archivoContrato",
           c.criminal_case as telefono,
@@ -66,8 +76,26 @@ export const getAllClients = async (
             WHEN c.payment_frequency IN ('Semanal', 'Quincenal', 'Mensual') THEN 'Crédito'
             ELSE 'Crédito'
           END as "tipoVenta",
-          -- Calcular fecha de vencimiento (fecha inicio + duración)
-          c.contract_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) as "fechaVencimiento",
+          -- Calcular fecha de vencimiento
+          -- Si hay renovación: usar renewal_date + renewal_duration
+          -- Si no: usar placement_date o contract_date + contract_duration
+          CASE 
+            WHEN lr.renewal_date IS NOT NULL THEN
+              lr.renewal_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(lr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER)
+            WHEN c.placement_date IS NOT NULL THEN
+              c.placement_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER)
+            ELSE
+              c.contract_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER)
+          END as "fechaVencimiento",
+          -- Calcular días restantes
+          CASE 
+            WHEN lr.renewal_date IS NOT NULL THEN
+              CEIL(EXTRACT(EPOCH FROM (lr.renewal_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(lr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER) - CURRENT_DATE)) / 86400)
+            WHEN c.placement_date IS NOT NULL THEN
+              CEIL(EXTRACT(EPOCH FROM (c.placement_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) - CURRENT_DATE)) / 86400)
+            ELSE
+              CEIL(EXTRACT(EPOCH FROM (c.contract_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) - CURRENT_DATE)) / 86400)
+          END as "diasRestantes",
           -- Sumar pagos totales programados
           COALESCE(SUM(p.scheduled_amount), 0) as "ventasTotales",
           -- Sumar abonos realizados
@@ -77,12 +105,14 @@ export const getAllClients = async (
           -- Contar archivos
           COUNT(DISTINCT f.file_id) as "totalArchivos"
         FROM CLIENTS c
+        LEFT JOIN last_renewals lr ON c.client_id = lr.client_id AND lr.rn = 1
         LEFT JOIN CLIENT_PAYMENTS p ON c.client_id = p.client_id
         LEFT JOIN CLIENT_FILES f ON c.client_id = f.client_id
         ${whereClause}
         GROUP BY c.client_id, c.contract_number, c.defendant_name, c.contract_date, 
                  c.placement_date, c.contract_duration, c.status, c.cancellation_reason, c.contract_document, 
-                 c.criminal_case, c.payment_frequency, c.payment_day, c.registered_at
+                 c.criminal_case, c.payment_frequency, c.payment_day, c.registered_at, c.bracelet_type,
+                 lr.renewal_date, lr.renewal_duration
       )
       SELECT * FROM client_financials
       ${tipoVenta ? `WHERE "tipoVenta" = '${tipoVenta}'` : ''}
@@ -91,10 +121,47 @@ export const getAllClients = async (
 
     const result = await pool.query(query, queryParams);
 
+    // Para cada cliente, obtener detalle de pagos
+    const clientsWithPayments = await Promise.all(
+      result.rows.map(async (client) => {
+        const paymentsQuery = `
+          SELECT 
+            payment_id as id,
+            payment_type as tipo,
+            scheduled_amount as "importeProgramado",
+            scheduled_date as "fechaProgramada",
+            paid_amount as "importePagado",
+            paid_date as "fechaPagoReal",
+            payment_status as estado,
+            description as descripcion,
+            payment_method as "metodoPago",
+            reference_number as "numeroReferencia",
+            notes as notas,
+            travel_expenses as "gastosViaje",
+            travel_expenses_date as "fechaGastosViaje",
+            other_expenses as "otrosGastos",
+            other_expenses_date as "fechaOtrosGastos",
+            other_expenses_description as "descripcionOtrosGastos",
+            created_at as "fechaCreacion",
+            updated_at as "fechaActualizacion"
+          FROM CLIENT_PAYMENTS
+          WHERE client_id = $1
+          ORDER BY scheduled_date DESC, created_at DESC
+        `;
+        
+        const paymentsResult = await pool.query(paymentsQuery, [client.client_id]);
+        return {
+          ...client,
+          pagos: paymentsResult.rows,
+          totalPagos: paymentsResult.rowCount || 0
+        };
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      data: result.rows,
-      total: result.rows.length,
+      data: clientsWithPayments,
+      total: clientsWithPayments.length,
       message: "Clientes obtenidos correctamente",
     });
   } catch (error: any) {
@@ -165,7 +232,12 @@ export const getClientById = async (
         description as descripcion,
         payment_method as "metodoPago",
         reference_number as "numeroReferencia",
-        notes as notas
+        notes as notas,
+        travel_expenses as "gastosViaje",
+        travel_expenses_date as "fechaGastosViaje",
+        other_expenses as "otrosGastos",
+        other_expenses_date as "fechaOtrosGastos",
+        other_expenses_description as "descripcionOtrosGastos"
       FROM CLIENT_PAYMENTS
       WHERE client_id = $1
       ORDER BY scheduled_date DESC
