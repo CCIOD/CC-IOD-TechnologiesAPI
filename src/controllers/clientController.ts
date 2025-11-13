@@ -216,6 +216,10 @@ export const createClient = asyncHandler(async (
       ? new Date(contract_date).toISOString().split('T')[0] 
       : null;
 
+    const placementDateOptional = placement_date && placement_date.trim() !== ''
+      ? new Date(placement_date).toISOString().split('T')[0]
+      : null;
+
     logInfo("🔍 Validating prospect status", { prospectId: prospect_id });
     const prospect = await pool.query(
       "SELECT status FROM PROSPECTS WHERE prospect_id = $1",
@@ -255,7 +259,7 @@ export const createClient = asyncHandler(async (
         court_name,
         lawyer_name,
         signer_name,
-        new Date(placement_date).toISOString().split('T')[0],
+        placementDateOptional,
         contractDateOptional,
         contract_document || null,
         contract_duration || null,
@@ -494,6 +498,9 @@ export const updateClient = asyncHandler(async (
     const contractDateForUpdate = contract_date 
       ? new Date(contract_date).toISOString().split('T')[0] 
       : null;
+    const placementDateForUpdate = placement_date && placement_date.trim() !== ''
+      ? new Date(placement_date).toISOString().split('T')[0]
+      : null;
 
     // Actualizar cliente
     logInfo("💾 Updating client data", { clientId: client_id });
@@ -508,7 +515,7 @@ export const updateClient = asyncHandler(async (
         court_name,
         lawyer_name,
         signer_name,
-        new Date(placement_date).toISOString().split('T')[0],
+        placementDateForUpdate,
         contractDateForUpdate,
         contract_document || null,
         contract_duration || null,
@@ -543,7 +550,7 @@ export const updateClient = asyncHandler(async (
         { name: 'court_name', old: currentClient.court_name, new: court_name },
         { name: 'lawyer_name', old: currentClient.lawyer_name, new: lawyer_name },
         { name: 'signer_name', old: currentClient.signer_name, new: signer_name },
-        { name: 'placement_date', old: currentClient.placement_date?.toISOString().split('T')[0], new: new Date(placement_date).toISOString().split('T')[0] },
+        { name: 'placement_date', old: currentClient.placement_date?.toISOString().split('T')[0], new: placementDateForUpdate },
         { name: 'contract_date', old: currentClient.contract_date?.toISOString().split('T')[0], new: contractDateForUpdate },
         { name: 'contract_document', old: currentClient.contract_document, new: contract_document },
         { name: 'contract_duration', old: currentClient.contract_duration, new: contract_duration },

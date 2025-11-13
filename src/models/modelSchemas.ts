@@ -107,7 +107,7 @@ export const clientSchema = Joi.object({
   lawyer_name: stringValidation("El nombre del Abogado"),
   signer_name: stringValidation("El nombre de quién firma el contrato"),
   ...contact_numbers,
-  placement_date: dateValidation("fecha de colocación").optional(),
+  placement_date: dateValidation("fecha de colocación").optional().allow('', null),
   ...hearings,
   contract_date: Joi.date().iso().optional().allow('', null).messages({
     'date.base': 'La fecha del contrato debe ser una fecha válida.',
@@ -145,7 +145,7 @@ export const clientSchema = Joi.object({
 
 export const carrierSchema = Joi.object({
   residence_area: stringValidation("La Zona de residencia"),
-  placement_date: dateValidation("fecha de colocación"),
+  placement_date: dateValidation("fecha de colocación").optional().allow('', null),
   placement_time: timeValidation,
   electronic_bracelet: stringValidation("El brazalete electrónico"),
   beacon: stringValidation("El BEACON"),
