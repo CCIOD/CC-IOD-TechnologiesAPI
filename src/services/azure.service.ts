@@ -109,8 +109,15 @@ export const azureUploadBlob = async ({
     console.log(`[Azure Upload] Iniciando subida: ${blob.originalname} (${blob.size} bytes)`);
 
     // Construir nombre del blob con carpeta opcional
-    const fileName = blob.originalname.replace(/ /g, "_");
-    const blobName = folderPath ? `${folderPath}/${fileName}` : fileName;
+    // Sanitizar: remover caracteres especiales, acentos y espacios
+    const sanitizedFileName = blob.originalname
+      .normalize('NFD')                          // Descomponer caracteres con acentos
+      .replace(/[\u0300-\u036f]/g, '')           // Remover marcas diacríticas
+      .replace(/[^a-zA-Z0-9._-]/g, '_')          // Reemplazar caracteres especiales con _
+      .replace(/_{2,}/g, '_')                    // Remover guiones bajos múltiples
+      .toLowerCase();                             // Convertir a minúsculas
+    
+    const blobName = folderPath ? `${folderPath}/${sanitizedFileName}` : sanitizedFileName;
     
     // Crear cliente con manejo de errores mejorado
     let blockBlobClient: BlockBlobClient;
