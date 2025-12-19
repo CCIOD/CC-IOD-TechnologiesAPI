@@ -5,6 +5,8 @@ import {
   createClient,
   updateClient,
   deleteClient,
+  updateOriginalContractAmount,
+  updateRenewalAmount,
 } from "../controllers/administrationController";
 import {
   getPaymentsByClient,
@@ -87,6 +89,13 @@ router.put("/clients/:id", updateClient);
  */
 router.delete("/clients/:id", deleteClient);
 
+/**
+ * @route   PUT /api/administration/clients/:id/original-amount
+ * @desc    Update the original contract amount
+ * @access  Private
+ */
+router.put("/clients/:id/original-amount", updateOriginalContractAmount);
+
 // ==================== PAYMENTS ====================
 /**
  * @route   GET /api/administration/clients/:id/payments
@@ -137,5 +146,13 @@ router.post("/clients/:id/files", upload.single("file"), uploadFile);
  * @access  Private
  */
 router.delete("/files/:fileId", deleteFile);
+
+// ==================== RENEWALS ====================
+/**
+ * @route   PUT /api/administration/renewals/:id/amount
+ * @desc    Update the renewal amount
+ * @access  Private
+ */
+router.put("/renewals/:id/amount", updateRenewalAmount);
 
 export default router;

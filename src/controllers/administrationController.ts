@@ -70,6 +70,10 @@ export const getAllClients = async (
           c.payment_frequency as "frecuenciaPago",
           c.payment_day as "diaPago",
           c.registered_at,
+          c.contract_total_amount as "montoTotalContrato",
+          c.contract_paid_amount as "montoPagado",
+          c.contract_pending_amount as "montoPendiente",
+          c.contract_original_amount as "montoOriginalContrato",
           -- Calcular tipo de venta basado en frecuencia de pago
           CASE 
             WHEN c.payment_frequency = 'Contado' THEN 'Contado'
@@ -112,6 +116,7 @@ export const getAllClients = async (
         GROUP BY c.client_id, c.contract_number, c.defendant_name, c.contract_date, 
                  c.placement_date, c.contract_duration, c.status, c.cancellation_reason, c.contract_document, 
                  c.criminal_case, c.payment_frequency, c.payment_day, c.registered_at, c.bracelet_type,
+                 c.contract_total_amount, c.contract_paid_amount, c.contract_pending_amount, c.contract_original_amount,
                  lr.renewal_date, lr.renewal_duration
       )
       SELECT * FROM client_financials
@@ -148,12 +153,45 @@ export const getAllClients = async (
           WHERE client_id = $1
           ORDER BY scheduled_date DESC, created_at DESC
         `;
+
+        const contactsQuery = `
+          SELECT 
+            contact_name as nombre,
+            phone_number as telefono,
+            relationship as relacion
+          FROM CLIENT_CONTACTS
+          WHERE client_id = $1
+          ORDER BY contact_name ASC
+        `;
         
-        const paymentsResult = await pool.query(paymentsQuery, [client.client_id]);
+        const [paymentsResult, contactsResult] = await Promise.all([
+          pool.query(paymentsQuery, [client.client_id]),
+          pool.query(contactsQuery, [client.client_id])
+        ]);
+
+        // Obtener TODAS las renovaciones del cliente
+        const renewalsQuery = `
+          SELECT 
+            renewal_id as id,
+            renewal_date as "fechaRenovacion",
+            renewal_duration as "duracionRenovacion",
+            renewal_amount as "montoRenovacion",
+            created_at as "fechaCreacion",
+            updated_at as "fechaActualizacion"
+          FROM CONTRACT_RENEWALS
+          WHERE client_id = $1
+          ORDER BY renewal_date DESC
+        `;
+        const renewalsResult = await pool.query(renewalsQuery, [client.client_id]);
+
         return {
           ...client,
           pagos: paymentsResult.rows,
-          totalPagos: paymentsResult.rowCount || 0
+          totalPagos: paymentsResult.rowCount || 0,
+          contactos: contactsResult.rows,
+          totalContactos: contactsResult.rowCount || 0,
+          renovaciones: renewalsResult.rows,
+          totalRenovaciones: renewalsResult.rowCount || 0
         };
       })
     );
@@ -196,6 +234,10 @@ export const getClientById = async (
         c.criminal_case as telefono,
         c.payment_frequency as "frecuenciaPago",
         c.payment_day as "diaPago",
+        c.contract_total_amount as "montoTotalContrato",
+        c.contract_paid_amount as "montoPagado",
+        c.contract_pending_amount as "montoPendiente",
+        c.contract_original_amount as "montoOriginalContrato",
         -- Calcular tipo de venta basado en frecuencia de pago
         CASE 
           WHEN c.payment_frequency = 'Contado' THEN 'Contado'
@@ -245,6 +287,19 @@ export const getClientById = async (
     const paymentsResult = await pool.query(paymentsQuery, [client_id]);
     client.pagos = paymentsResult.rows;
 
+    // Obtener contactos del cliente
+    const contactsQuery = `
+      SELECT 
+        contact_name as nombre,
+        phone_number as telefono,
+        relationship as relacion
+      FROM CLIENT_CONTACTS
+      WHERE client_id = $1
+      ORDER BY contact_name ASC
+    `;
+    const contactsResult = await pool.query(contactsQuery, [client_id]);
+    client.contactos = contactsResult.rows;
+
     // Obtener archivos del cliente
     const filesQuery = `
       SELECT 
@@ -261,6 +316,22 @@ export const getClientById = async (
     `;
     const filesResult = await pool.query(filesQuery, [client_id]);
     client.archivos = filesResult.rows;
+
+    // Obtener TODAS las renovaciones del cliente
+    const renewalsQuery = `
+      SELECT 
+        renewal_id as id,
+        renewal_date as "fechaRenovacion",
+        renewal_duration as "duracionRenovacion",
+        renewal_amount as "montoRenovacion",
+        created_at as "fechaCreacion",
+        updated_at as "fechaActualizacion"
+      FROM CONTRACT_RENEWALS
+      WHERE client_id = $1
+      ORDER BY renewal_date DESC
+    `;
+    const renewalsResult = await pool.query(renewalsQuery, [client_id]);
+    client.renovaciones = renewalsResult.rows;
 
     // Calcular totales
     const totalesQuery = `
@@ -392,19 +463,74 @@ export const updateClient = async (
     // Mapeo de campos del frontend al backend
     const fieldMapping: any = {
       numeroContrato: 'contract_number',
+      contract_number: 'contract_number',
       nombre: 'defendant_name',
+      defendant_name: 'defendant_name',
       fechaInicio: 'contract_date',
+      contract_date: 'contract_date',
       fechaColocacion: 'placement_date',
+      placement_date: 'placement_date',
       periodoContratacion: 'contract_duration',
+      contract_duration: 'contract_duration',
       telefono: 'criminal_case',
+      criminal_case: 'criminal_case',
       estado: 'status',
+      status: 'status',
       frecuenciaPago: 'payment_frequency',
+      payment_frequency: 'payment_frequency',
       diaPago: 'payment_day',
+      payment_day: 'payment_day',
+      bracelet_type: 'bracelet_type',
+      tipoBrazalete: 'bracelet_type',
+      cancellation_reason: 'cancellation_reason',
+      motivoCancelacion: 'cancellation_reason',
+      contract_document: 'contract_document',
+      archivoContrato: 'contract_document',
+      contract_total_amount: 'contract_total_amount',
+      montoTotalContrato: 'contract_total_amount',
+      contract_paid_amount: 'contract_paid_amount',
+      montoPagado: 'contract_paid_amount',
+      contract_pending_amount: 'contract_pending_amount',
+      montoPendiente: 'contract_pending_amount',
+      contract_original_amount: 'contract_original_amount',
+      montoOriginalContrato: 'contract_original_amount',
     };
 
+    // Columnas válidas en la tabla CLIENTS
+    const validColumns = new Set([
+      'contract_number',
+      'defendant_name',
+      'contract_date',
+      'placement_date',
+      'contract_duration',
+      'criminal_case',
+      'status',
+      'payment_frequency',
+      'payment_day',
+      'bracelet_type',
+      'cancellation_reason',
+      'contract_document',
+      'contract_total_amount',
+      'contract_paid_amount',
+      'contract_pending_amount',
+      'contract_original_amount',
+    ]);
+
     Object.keys(updates).forEach((key) => {
-      const dbField = fieldMapping[key] || key;
-      if (updates[key] !== undefined) {
+      let dbField = fieldMapping[key];
+      
+      // Si no está en el mapeo, usar el campo tal cual (en minúsculas)
+      if (!dbField) {
+        dbField = key.toLowerCase();
+      }
+
+      // Validar que el campo existe en la tabla
+      if (!validColumns.has(dbField)) {
+        console.warn(`Campo no válido ignorado: ${key} (${dbField})`);
+        return; // Ignorar campos que no existen
+      }
+
+      if (updates[key] !== undefined && updates[key] !== null && updates[key] !== '') {
         updateFields.push(`${dbField} = $${paramCount}`);
         values.push(updates[key]);
         paramCount++;
@@ -493,6 +619,159 @@ export const deleteClient = async (
     }
   } catch (error: any) {
     console.error("Error al eliminar cliente:", error);
+    next(error);
+  }
+};
+
+/**
+ * Actualizar el valor original del contrato
+ * PUT /administration/clients/:id/original-amount
+ */
+export const updateOriginalContractAmount = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> => {
+  const client_id = parseInt(req.params.id);
+  const { contract_original_amount } = req.body;
+
+  try {
+    if (isNaN(client_id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID de cliente inválido",
+      });
+    }
+
+    if (contract_original_amount === undefined || contract_original_amount === null) {
+      return res.status(400).json({
+        success: false,
+        message: "El valor del contrato original es requerido",
+      });
+    }
+
+    const amount = parseFloat(contract_original_amount);
+    if (isNaN(amount)) {
+      return res.status(400).json({
+        success: false,
+        message: "El valor del contrato debe ser un número válido",
+      });
+    }
+
+    // Verificar que el cliente existe
+    const clientCheck = await pool.query(
+      "SELECT client_id, contract_original_amount FROM CLIENTS WHERE client_id = $1",
+      [client_id]
+    );
+
+    if (!clientCheck.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: "Cliente no encontrado",
+      });
+    }
+
+    const previousAmount = clientCheck.rows[0].contract_original_amount;
+
+    // Actualizar el valor original del contrato
+    const updateQuery = `
+      UPDATE CLIENTS 
+      SET contract_original_amount = $1
+      WHERE client_id = $2
+      RETURNING client_id, contract_original_amount
+    `;
+
+    const result = await pool.query(updateQuery, [amount, client_id]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Valor original del contrato actualizado correctamente",
+      data: {
+        client_id: result.rows[0].client_id,
+        contract_original_amount: result.rows[0].contract_original_amount,
+        previousAmount: previousAmount,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error al actualizar valor original del contrato:", error);
+    next(error);
+  }
+};
+
+/**
+ * Actualizar el monto de la renovación
+ * PUT /administration/renewals/:renewalId/amount
+ */
+export const updateRenewalAmount = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<Response | void> => {
+  const renewal_id = parseInt(req.params.id);
+  const { renewal_amount } = req.body;
+
+  try {
+    if (isNaN(renewal_id)) {
+      return res.status(400).json({
+        success: false,
+        message: "ID de renovación inválido",
+      });
+    }
+
+    if (renewal_amount === undefined || renewal_amount === null) {
+      return res.status(400).json({
+        success: false,
+        message: "El monto de la renovación es requerido",
+      });
+    }
+
+    const amount = parseFloat(renewal_amount);
+    if (isNaN(amount)) {
+      return res.status(400).json({
+        success: false,
+        message: "El monto de la renovación debe ser un número válido",
+      });
+    }
+
+    // Verificar que la renovación existe
+    const renewalCheck = await pool.query(
+      "SELECT renewal_id, client_id, renewal_amount FROM CONTRACT_RENEWALS WHERE renewal_id = $1",
+      [renewal_id]
+    );
+
+    if (!renewalCheck.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: "Renovación no encontrada",
+      });
+    }
+
+    const previousAmount = renewalCheck.rows[0].renewal_amount;
+    const client_id = renewalCheck.rows[0].client_id;
+
+    // Actualizar el monto de la renovación
+    const updateQuery = `
+      UPDATE CONTRACT_RENEWALS 
+      SET renewal_amount = $1
+      WHERE renewal_id = $2
+      RETURNING renewal_id, client_id, renewal_amount, renewal_date
+    `;
+
+    const result = await pool.query(updateQuery, [amount, renewal_id]);
+
+    return res.status(200).json({
+      success: true,
+      message: "Monto de la renovación actualizado correctamente",
+      data: {
+        renewal_id: result.rows[0].renewal_id,
+        client_id: result.rows[0].client_id,
+        renewal_amount: result.rows[0].renewal_amount,
+        renewal_date: result.rows[0].renewal_date,
+        previousAmount: previousAmount,
+      },
+    });
+  } catch (error: any) {
+    console.error("Error al actualizar monto de la renovación:", error);
     next(error);
   }
 };

@@ -198,6 +198,7 @@ export const createClient = asyncHandler(async (
     observations,
     status,
     prospect_id,
+    contract_original_amount,
   } = req.body;
 
   logInfo("👤 Creating new client", { 
@@ -249,7 +250,7 @@ export const createClient = asyncHandler(async (
 
     // Insertar cliente con timestamp de registro automático
     const clientQuery = {
-      text: "INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, placement_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, bracelet_type, status, prospect_id, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, CURRENT_TIMESTAMP) RETURNING client_id",
+      text: "INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, placement_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, bracelet_type, status, prospect_id, contract_original_amount, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP) RETURNING client_id",
       values: [
         contract_number || null,
         defendant_name,
@@ -268,6 +269,7 @@ export const createClient = asyncHandler(async (
         bracelet_type || null,
         status,
         prospect_id,
+        contract_original_amount || null,
       ],
     };
     const clientResult = await pool.query(clientQuery);
@@ -430,6 +432,7 @@ export const updateClient = asyncHandler(async (
     status,
     cancellation_reason,
     prospect_id,
+    contract_original_amount,
   } = req.body;
 
   logInfo("✏️ Updating client", { 
@@ -505,7 +508,7 @@ export const updateClient = asyncHandler(async (
     // Actualizar cliente
     logInfo("💾 Updating client data", { clientId: client_id });
     const clientQuery = {
-      text: "UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, placement_date=$9, contract_date=$10, contract_document=$11, contract_duration=$12, payment_day=$13, payment_frequency=$14, bracelet_type=$15, status=$16, cancellation_reason=$17 WHERE client_id = $18 RETURNING *",
+      text: "UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, placement_date=$9, contract_date=$10, contract_document=$11, contract_duration=$12, payment_day=$13, payment_frequency=$14, bracelet_type=$15, status=$16, cancellation_reason=$17, contract_original_amount=$18 WHERE client_id = $19 RETURNING *",
       values: [
         contract_number || null,
         defendant_name,
@@ -524,6 +527,7 @@ export const updateClient = asyncHandler(async (
         bracelet_type || null,
         newStatus,
         cancellation_reason || null,
+        contract_original_amount || null,
         client_id,
       ],
     };
