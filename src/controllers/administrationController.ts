@@ -1,5 +1,5 @@
-import { Request, Response, NextFunction } from "express";
-import { pool } from "../database/connection";
+import { Request, Response, NextFunction } from 'express';
+import { pool } from '../database/connection';
 
 /**
  * ENUM client_status valores válidos:
@@ -12,11 +12,7 @@ import { pool } from "../database/connection";
 /**
  * Obtener lista de todos los clientes con información financiera
  */
-export const getAllClients = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const getAllClients = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   try {
     // Filtros
     const nombre = req.query.nombre as string;
@@ -40,9 +36,7 @@ export const getAllClients = async (
       paramCount++;
     }
 
-    const whereClause = whereConditions.length > 0 
-      ? `WHERE ${whereConditions.join(' AND ')}` 
-      : '';
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
 
     const query = `
       WITH last_renewals AS (
@@ -163,10 +157,10 @@ export const getAllClients = async (
           WHERE client_id = $1
           ORDER BY contact_name ASC
         `;
-        
+
         const [paymentsResult, contactsResult] = await Promise.all([
           pool.query(paymentsQuery, [client.client_id]),
-          pool.query(contactsQuery, [client.client_id])
+          pool.query(contactsQuery, [client.client_id]),
         ]);
 
         // Obtener TODAS las renovaciones del cliente
@@ -191,7 +185,7 @@ export const getAllClients = async (
           contactos: contactsResult.rows,
           totalContactos: contactsResult.rowCount || 0,
           renovaciones: renewalsResult.rows,
-          totalRenovaciones: renewalsResult.rowCount || 0
+          totalRenovaciones: renewalsResult.rowCount || 0,
         };
       })
     );
@@ -200,10 +194,10 @@ export const getAllClients = async (
       success: true,
       data: clientsWithPayments,
       total: clientsWithPayments.length,
-      message: "Clientes obtenidos correctamente",
+      message: 'Clientes obtenidos correctamente',
     });
   } catch (error: any) {
-    console.error("Error al obtener clientes:", error);
+    console.error('Error al obtener clientes:', error);
     next(error);
   }
 };
@@ -211,11 +205,7 @@ export const getAllClients = async (
 /**
  * Obtener detalle completo de un cliente
  */
-export const getClientById = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const getClientById = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const client_id = parseInt(req.params.id);
 
   try {
@@ -255,7 +245,7 @@ export const getClientById = async (
     if (!clientResult.rowCount) {
       return res.status(404).json({
         success: false,
-        message: "Cliente no encontrado",
+        message: 'Cliente no encontrado',
       });
     }
 
@@ -348,10 +338,10 @@ export const getClientById = async (
     return res.status(200).json({
       success: true,
       data: client,
-      message: "Cliente obtenido correctamente",
+      message: 'Cliente obtenido correctamente',
     });
   } catch (error: any) {
-    console.error("Error al obtener cliente:", error);
+    console.error('Error al obtener cliente:', error);
     next(error);
   }
 };
@@ -359,11 +349,7 @@ export const getClientById = async (
 /**
  * Crear un nuevo cliente con configuración inicial
  */
-export const createClient = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const createClient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const {
     numeroContrato,
     nombre,
@@ -424,10 +410,10 @@ export const createClient = async (
     return res.status(201).json({
       success: true,
       data: newClient,
-      message: "Cliente creado correctamente",
+      message: 'Cliente creado correctamente',
     });
   } catch (error: any) {
-    console.error("Error al crear cliente:", error);
+    console.error('Error al crear cliente:', error);
     next(error);
   }
 };
@@ -435,23 +421,19 @@ export const createClient = async (
 /**
  * Actualizar un cliente existente
  */
-export const updateClient = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const updateClient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const client_id = parseInt(req.params.id);
   const updates = req.body;
 
   try {
     // Verificar que el cliente existe
-    const checkQuery = "SELECT client_id FROM CLIENTS WHERE client_id = $1";
+    const checkQuery = 'SELECT client_id FROM CLIENTS WHERE client_id = $1';
     const checkResult = await pool.query(checkQuery, [client_id]);
 
     if (!checkResult.rowCount) {
       return res.status(404).json({
         success: false,
-        message: "Cliente no encontrado",
+        message: 'Cliente no encontrado',
       });
     }
 
@@ -518,7 +500,7 @@ export const updateClient = async (
 
     Object.keys(updates).forEach((key) => {
       let dbField = fieldMapping[key];
-      
+
       // Si no está en el mapeo, usar el campo tal cual (en minúsculas)
       if (!dbField) {
         dbField = key.toLowerCase();
@@ -540,7 +522,7 @@ export const updateClient = async (
     if (updateFields.length === 0) {
       return res.status(400).json({
         success: false,
-        message: "No se proporcionaron campos para actualizar",
+        message: 'No se proporcionaron campos para actualizar',
       });
     }
 
@@ -548,7 +530,7 @@ export const updateClient = async (
 
     const updateQuery = `
       UPDATE CLIENTS
-      SET ${updateFields.join(", ")}
+      SET ${updateFields.join(', ')}
       WHERE client_id = $${paramCount}
       RETURNING client_id as id, contract_number as "numeroContrato", 
                 defendant_name as nombre, status as estado
@@ -559,10 +541,10 @@ export const updateClient = async (
     return res.status(200).json({
       success: true,
       data: result.rows[0],
-      message: "Cliente actualizado correctamente",
+      message: 'Cliente actualizado correctamente',
     });
   } catch (error: any) {
-    console.error("Error al actualizar cliente:", error);
+    console.error('Error al actualizar cliente:', error);
     next(error);
   }
 };
@@ -570,11 +552,7 @@ export const updateClient = async (
 /**
  * Eliminar o desactivar un cliente
  */
-export const deleteClient = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const deleteClient = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const client_id = parseInt(req.params.id);
   const { soft = true } = req.query; // soft delete por defecto
 
@@ -592,33 +570,33 @@ export const deleteClient = async (
       if (!result.rowCount) {
         return res.status(404).json({
           success: false,
-          message: "Cliente no encontrado",
+          message: 'Cliente no encontrado',
         });
       }
 
       return res.status(200).json({
         success: true,
-        message: "Cliente desactivado correctamente",
+        message: 'Cliente desactivado correctamente',
       });
     } else {
       // Hard delete: eliminar físicamente
-      const query = "DELETE FROM CLIENTS WHERE client_id = $1 RETURNING client_id";
+      const query = 'DELETE FROM CLIENTS WHERE client_id = $1 RETURNING client_id';
       const result = await pool.query(query, [client_id]);
 
       if (!result.rowCount) {
         return res.status(404).json({
           success: false,
-          message: "Cliente no encontrado",
+          message: 'Cliente no encontrado',
         });
       }
 
       return res.status(200).json({
         success: true,
-        message: "Cliente eliminado correctamente",
+        message: 'Cliente eliminado correctamente',
       });
     }
   } catch (error: any) {
-    console.error("Error al eliminar cliente:", error);
+    console.error('Error al eliminar cliente:', error);
     next(error);
   }
 };
@@ -627,26 +605,22 @@ export const deleteClient = async (
  * Actualizar el valor original del contrato
  * PUT /administration/clients/:id/original-amount
  */
-export const updateOriginalContractAmount = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const updateOriginalContractAmount = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const client_id = parseInt(req.params.id);
-  const { contract_original_amount } = req.body;
+  const { contract_original_amount, payment_frequency } = req.body;
 
   try {
     if (isNaN(client_id)) {
       return res.status(400).json({
         success: false,
-        message: "ID de cliente inválido",
+        message: 'ID de cliente inválido',
       });
     }
 
     if (contract_original_amount === undefined || contract_original_amount === null) {
       return res.status(400).json({
         success: false,
-        message: "El valor del contrato original es requerido",
+        message: 'El valor del contrato original es requerido',
       });
     }
 
@@ -654,46 +628,112 @@ export const updateOriginalContractAmount = async (
     if (isNaN(amount)) {
       return res.status(400).json({
         success: false,
-        message: "El valor del contrato debe ser un número válido",
+        message: 'El valor del contrato debe ser un número válido',
       });
     }
 
-    // Verificar que el cliente existe
+    // Verificar que el cliente existe y obtener información necesaria
     const clientCheck = await pool.query(
-      "SELECT client_id, contract_original_amount FROM CLIENTS WHERE client_id = $1",
+      'SELECT client_id, contract_original_amount, contract_date, contract_duration, payment_frequency FROM CLIENTS WHERE client_id = $1',
       [client_id]
     );
 
     if (!clientCheck.rowCount) {
       return res.status(404).json({
         success: false,
-        message: "Cliente no encontrado",
+        message: 'Cliente no encontrado',
       });
     }
 
     const previousAmount = clientCheck.rows[0].contract_original_amount;
+    const previousFrequency = clientCheck.rows[0].payment_frequency;
+    const contractDate = clientCheck.rows[0].contract_date;
+    const contractDuration = clientCheck.rows[0].contract_duration;
+    const paymentFrequencyToUse = payment_frequency || clientCheck.rows[0].payment_frequency;
 
-    // Actualizar el valor original del contrato
+    // Actualizar el valor original del contrato y la frecuencia de pago en CLIENTS
     const updateQuery = `
       UPDATE CLIENTS 
-      SET contract_original_amount = $1
-      WHERE client_id = $2
-      RETURNING client_id, contract_original_amount
+      SET contract_original_amount = $1, payment_frequency = $2
+      WHERE client_id = $3
+      RETURNING client_id, contract_original_amount, payment_frequency
     `;
 
-    const result = await pool.query(updateQuery, [amount, client_id]);
+    const result = await pool.query(updateQuery, [amount, paymentFrequencyToUse, client_id]);
 
-    return res.status(200).json({
-      success: true,
-      message: "Valor original del contrato actualizado correctamente",
-      data: {
-        client_id: result.rows[0].client_id,
-        contract_original_amount: result.rows[0].contract_original_amount,
-        previousAmount: previousAmount,
-      },
-    });
+    // Verificar si ya existe un plan de pago para el contrato original
+    const planCheck = await pool.query("SELECT plan_id FROM CONTRACT_PAYMENT_PLANS WHERE client_id = $1 AND contract_type = 'original'", [client_id]);
+
+    if (planCheck.rowCount === 0) {
+      // Si no existe, crear el plan de pago
+      // Calcular fecha de fin del contrato
+      const contractEndDate = contractDate ? new Date(contractDate).toISOString().split('T')[0] : null;
+
+      const createPlanQuery = `
+        INSERT INTO CONTRACT_PAYMENT_PLANS (
+          client_id, contract_id, contract_type, renewal_id,
+          contract_start_date, contract_end_date, contract_amount,
+          payment_frequency,
+          total_scheduled_amount, total_paid_amount, total_pending_amount,
+          status, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, NULL, $4, $5, $6, $7, 0, 0, 0, 'Activo', NOW(), NOW())
+        RETURNING plan_id
+      `;
+
+      const planResult = await pool.query(createPlanQuery, [
+        client_id,
+        `ORIG_${client_id}`,
+        'original',
+        contractDate ? new Date(contractDate).toISOString().split('T')[0] : null,
+        contractEndDate,
+        amount,
+        paymentFrequencyToUse || null,
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Valor original del contrato actualizado correctamente y plan de pago creado',
+        data: {
+          client_id: result.rows[0].client_id,
+          contract_original_amount: result.rows[0].contract_original_amount,
+          payment_frequency: result.rows[0].payment_frequency,
+          previousAmount: previousAmount,
+          previousFrequency: previousFrequency,
+          paymentPlan: {
+            plan_id: planResult.rows[0].plan_id,
+            status: 'creado',
+            message: 'El plan de pago para el contrato original ha sido creado',
+          },
+        },
+      });
+    } else {
+      // Si ya existe, actualizar el monto y frecuencia del plan
+      await pool.query(`UPDATE CONTRACT_PAYMENT_PLANS SET contract_amount = $1, payment_frequency = $2 WHERE plan_id = $3`, [
+        amount,
+        paymentFrequencyToUse,
+        planCheck.rows[0].plan_id,
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Valor original del contrato actualizado correctamente',
+        data: {
+          client_id: result.rows[0].client_id,
+          contract_original_amount: result.rows[0].contract_original_amount,
+          payment_frequency: result.rows[0].payment_frequency,
+          previousAmount: previousAmount,
+          previousFrequency: previousFrequency,
+          paymentPlan: {
+            plan_id: planCheck.rows[0].plan_id,
+            status: 'actualizado',
+            message: 'El plan de pago ya existía y ha sido actualizado',
+          },
+        },
+      });
+    }
   } catch (error: any) {
-    console.error("Error al actualizar valor original del contrato:", error);
+    console.error('Error al actualizar valor original del contrato:', error);
     next(error);
   }
 };
@@ -702,26 +742,22 @@ export const updateOriginalContractAmount = async (
  * Actualizar el monto de la renovación
  * PUT /administration/renewals/:renewalId/amount
  */
-export const updateRenewalAmount = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-): Promise<Response | void> => {
+export const updateRenewalAmount = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const renewal_id = parseInt(req.params.id);
-  const { renewal_amount } = req.body;
+  const { renewal_amount, payment_frequency } = req.body;
 
   try {
     if (isNaN(renewal_id)) {
       return res.status(400).json({
         success: false,
-        message: "ID de renovación inválido",
+        message: 'ID de renovación inválido',
       });
     }
 
     if (renewal_amount === undefined || renewal_amount === null) {
       return res.status(400).json({
         success: false,
-        message: "El monto de la renovación es requerido",
+        message: 'El monto de la renovación es requerido',
       });
     }
 
@@ -729,25 +765,27 @@ export const updateRenewalAmount = async (
     if (isNaN(amount)) {
       return res.status(400).json({
         success: false,
-        message: "El monto de la renovación debe ser un número válido",
+        message: 'El monto de la renovación debe ser un número válido',
       });
     }
 
     // Verificar que la renovación existe
     const renewalCheck = await pool.query(
-      "SELECT renewal_id, client_id, renewal_amount FROM CONTRACT_RENEWALS WHERE renewal_id = $1",
+      'SELECT renewal_id, client_id, renewal_amount, renewal_date, renewal_duration FROM CONTRACT_RENEWALS WHERE renewal_id = $1',
       [renewal_id]
     );
 
     if (!renewalCheck.rowCount) {
       return res.status(404).json({
         success: false,
-        message: "Renovación no encontrada",
+        message: 'Renovación no encontrada',
       });
     }
 
     const previousAmount = renewalCheck.rows[0].renewal_amount;
     const client_id = renewalCheck.rows[0].client_id;
+    const renewalDate = renewalCheck.rows[0].renewal_date;
+    const renewalDuration = renewalCheck.rows[0].renewal_duration;
 
     // Actualizar el monto de la renovación
     const updateQuery = `
@@ -759,19 +797,98 @@ export const updateRenewalAmount = async (
 
     const result = await pool.query(updateQuery, [amount, renewal_id]);
 
-    return res.status(200).json({
-      success: true,
-      message: "Monto de la renovación actualizado correctamente",
-      data: {
-        renewal_id: result.rows[0].renewal_id,
-        client_id: result.rows[0].client_id,
-        renewal_amount: result.rows[0].renewal_amount,
-        renewal_date: result.rows[0].renewal_date,
-        previousAmount: previousAmount,
-      },
-    });
+    // Verificar si ya existe un plan de pago para esta renovación
+    const planCheck = await pool.query("SELECT plan_id FROM CONTRACT_PAYMENT_PLANS WHERE renewal_id = $1 AND contract_type = 'renewal'", [renewal_id]);
+
+    if (planCheck.rowCount === 0) {
+      // Obtener frecuencia de pago del cliente (puede ser sobrescrita si se envía en el body)
+      const clientPaymentFreq = await pool.query('SELECT payment_frequency FROM CLIENTS WHERE client_id = $1', [client_id]);
+      const clientFrequency = clientPaymentFreq.rows[0]?.payment_frequency || null;
+      const paymentFrequencyToUse = payment_frequency || clientFrequency;
+
+      // Si no existe, crear el plan de pago para la renovación
+      // Calcular fecha de fin (renewal_date + duration)
+      let contractEndDate = null;
+      if (renewalDate && renewalDuration) {
+        const startDate = new Date(renewalDate);
+        const months = parseInt(renewalDuration) || 0;
+        const endDate = new Date(startDate.setMonth(startDate.getMonth() + months));
+        contractEndDate = endDate.toISOString().split('T')[0];
+      }
+
+      const createPlanQuery = `
+        INSERT INTO CONTRACT_PAYMENT_PLANS (
+          client_id, contract_id, contract_type, renewal_id,
+          contract_start_date, contract_end_date, contract_amount,
+          payment_frequency,
+          total_scheduled_amount, total_paid_amount, total_pending_amount,
+          status, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 0, 0, 0, 'Activo', NOW(), NOW())
+        RETURNING plan_id
+      `;
+
+      const planResult = await pool.query(createPlanQuery, [
+        client_id,
+        `REN_${renewal_id}_${Date.now()}`,
+        'renewal',
+        renewal_id,
+        renewalDate ? new Date(renewalDate).toISOString().split('T')[0] : null,
+        contractEndDate,
+        amount,
+        paymentFrequencyToUse,
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Monto de la renovación actualizado correctamente y plan de pago creado',
+        data: {
+          renewal_id: result.rows[0].renewal_id,
+          client_id: result.rows[0].client_id,
+          renewal_amount: result.rows[0].renewal_amount,
+          renewal_date: result.rows[0].renewal_date,
+          payment_frequency: paymentFrequencyToUse,
+          previousAmount: previousAmount,
+          paymentPlan: {
+            plan_id: planResult.rows[0].plan_id,
+            status: 'creado',
+            message: 'El plan de pago para la renovación ha sido creado',
+          },
+        },
+      });
+    } else {
+      // Si ya existe, actualizar el monto y frecuencia del plan
+      // Obtener la frecuencia actual del cliente si no se proporciona
+      const clientPaymentFreq = await pool.query('SELECT payment_frequency FROM CLIENTS WHERE client_id = $1', [client_id]);
+      const clientFrequency = clientPaymentFreq.rows[0]?.payment_frequency || null;
+      const paymentFrequencyToUse = payment_frequency || clientFrequency;
+
+      await pool.query(`UPDATE CONTRACT_PAYMENT_PLANS SET contract_amount = $1, payment_frequency = $2 WHERE plan_id = $3`, [
+        amount,
+        paymentFrequencyToUse,
+        planCheck.rows[0].plan_id,
+      ]);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Monto de la renovación actualizado correctamente',
+        data: {
+          renewal_id: result.rows[0].renewal_id,
+          client_id: result.rows[0].client_id,
+          renewal_amount: result.rows[0].renewal_amount,
+          renewal_date: result.rows[0].renewal_date,
+          payment_frequency: paymentFrequencyToUse,
+          previousAmount: previousAmount,
+          paymentPlan: {
+            plan_id: planCheck.rows[0].plan_id,
+            status: 'actualizado',
+            message: 'El plan de pago ya existía y ha sido actualizado',
+          },
+        },
+      });
+    }
   } catch (error: any) {
-    console.error("Error al actualizar monto de la renovación:", error);
+    console.error('Error al actualizar monto de la renovación:', error);
     next(error);
   }
 };
