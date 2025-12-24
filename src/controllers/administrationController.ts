@@ -163,18 +163,20 @@ export const getAllClients = async (req: Request, res: Response, next: NextFunct
           pool.query(contactsQuery, [client.client_id]),
         ]);
 
-        // Obtener TODAS las renovaciones del cliente
+        // Obtener TODAS las renovaciones del cliente con su frecuencia de pago
         const renewalsQuery = `
           SELECT 
-            renewal_id as id,
-            renewal_date as "fechaRenovacion",
-            renewal_duration as "duracionRenovacion",
-            renewal_amount as "montoRenovacion",
-            created_at as "fechaCreacion",
-            updated_at as "fechaActualizacion"
-          FROM CONTRACT_RENEWALS
-          WHERE client_id = $1
-          ORDER BY renewal_date DESC
+            r.renewal_id as id,
+            r.renewal_date as "fechaRenovacion",
+            r.renewal_duration as "duracionRenovacion",
+            r.renewal_amount as "montoRenovacion",
+            r.created_at as "fechaCreacion",
+            r.updated_at as "fechaActualizacion",
+            p.payment_frequency as "frecuenciaPago"
+          FROM CONTRACT_RENEWALS r
+          LEFT JOIN CONTRACT_PAYMENT_PLANS p ON r.renewal_id = p.renewal_id AND p.contract_type = 'renewal'
+          WHERE r.client_id = $1
+          ORDER BY r.renewal_date DESC
         `;
         const renewalsResult = await pool.query(renewalsQuery, [client.client_id]);
 
