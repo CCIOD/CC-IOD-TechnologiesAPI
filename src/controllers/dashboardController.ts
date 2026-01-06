@@ -263,19 +263,42 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
     const pendientesAprobacionResult = await pool.query(pendientesAprobacionQuery);
     const totalPendientesAprobacion = parseInt(pendientesAprobacionResult.rows[0].total || 0);
 
-    // 17. Pagos acumulados del año actual
+    // 17. Pagos acumulados por año (todos los años registrados)
     const pagosAcumuladosAnioQuery = `
       SELECT 
+        EXTRACT(YEAR FROM paid_date) as anio,
         COUNT(*) as "cantidadPagos",
         COALESCE(SUM(paid_amount), 0) as "totalPagado"
       FROM CONTRACT_PLAN_PAYMENTS
       WHERE paid_date IS NOT NULL
-        AND EXTRACT(YEAR FROM paid_date) = EXTRACT(YEAR FROM CURRENT_DATE)
+      GROUP BY EXTRACT(YEAR FROM paid_date)
+      ORDER BY anio DESC
     `;
     const pagosAcumuladosAnioResult = await pool.query(pagosAcumuladosAnioQuery);
-    const pagosAcumuladosAnio = {
-      total: parseFloat(pagosAcumuladosAnioResult.rows[0].totalPagado || 0),
-      cantidadPagos: parseInt(pagosAcumuladosAnioResult.rows[0].cantidadPagos || 0),
+
+    // Convertir el resultado en un objeto por año
+    const pagosAcumuladosAnio: any = {};
+    let totalHistoricoPagos = 0;
+    let cantidadHistoricoPagos = 0;
+
+    pagosAcumuladosAnioResult.rows.forEach((row: any) => {
+      const anio = parseInt(row.anio);
+      const total = parseFloat(row.totalPagado || 0);
+      const cantidad = parseInt(row.cantidadPagos || 0);
+
+      pagosAcumuladosAnio[anio] = {
+        total,
+        cantidadPagos: cantidad,
+      };
+
+      totalHistoricoPagos += total;
+      cantidadHistoricoPagos += cantidad;
+    });
+
+    // Total acumulado de todos los años
+    const totalAcumuladoHistorico = {
+      total: totalHistoricoPagos,
+      cantidadPagos: cantidadHistoricoPagos,
     };
 
     // Construir respuesta optimizada para el frontend
@@ -297,10 +320,8 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
         total: ingresosDelMes.total,
         cantidadPagos: ingresosDelMes.cantidadPagos,
       },
-      pagosAcumuladosAnio: {
-        total: pagosAcumuladosAnio.total,
-        cantidadPagos: pagosAcumuladosAnio.cantidadPagos,
-      },
+      pagosAcumuladosAnio, // Objeto con totales por año { 2024: { total, cantidadPagos }, 2025: {...}, ... }
+      totalAcumuladoHistorico, // Total acumulado de todos los años
 
       // Información adicional
       resumen: {
