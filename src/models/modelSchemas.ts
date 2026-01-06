@@ -225,9 +225,9 @@ export const updateRenewalSchema = Joi.object({
   renewal_date: dateValidation('fecha de renovación').optional(),
   renewal_document: Joi.string().optional().allow('', null),
   renewal_duration: stringValidation('duración de renovación').optional().allow('', null).max(50),
-  renewal_amount: Joi.number().positive().optional().allow(null).messages({
+  renewal_amount: Joi.number().min(0).optional().allow(null).messages({
     'number.base': 'El monto de renovación debe ser un número',
-    'number.positive': 'El monto de renovación debe ser un valor positivo',
+    'number.min': 'El monto de renovación no puede ser negativo',
   }),
   payment_frequency: Joi.string().optional().allow('', null).valid('Mensual', 'Bimestral', 'Trimestral', 'Semestral', 'Contado').messages({
     'any.only': 'La frecuencia de pago debe ser: Mensual, Bimestral, Trimestral, Semestral o Contado',
