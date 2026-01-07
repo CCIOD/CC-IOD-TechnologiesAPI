@@ -301,6 +301,44 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
       cantidadPagos: cantidadHistoricoPagos,
     };
 
+    // 18. Saldos deudores pendientes de pago por año
+    const saldosDeudoresPorAnioQuery = `
+      SELECT 
+        EXTRACT(YEAR FROM scheduled_date) as anio,
+        COUNT(*) as "cantidadPagos",
+        COALESCE(SUM(scheduled_amount - COALESCE(paid_amount, 0)), 0) as "totalAdeudo"
+      FROM CONTRACT_PLAN_PAYMENTS
+      WHERE payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+      GROUP BY EXTRACT(YEAR FROM scheduled_date)
+      ORDER BY anio DESC
+    `;
+    const saldosDeudoresPorAnioResult = await pool.query(saldosDeudoresPorAnioQuery);
+
+    // Convertir el resultado en un objeto por año
+    const saldosDeudoresPorAnio: any = {};
+    let totalHistoricoAdeudo = 0;
+    let cantidadHistoricoAdeudo = 0;
+
+    saldosDeudoresPorAnioResult.rows.forEach((row: any) => {
+      const anio = parseInt(row.anio);
+      const total = parseFloat(row.totalAdeudo || 0);
+      const cantidad = parseInt(row.cantidadPagos || 0);
+
+      saldosDeudoresPorAnio[anio] = {
+        totalAdeudo: total,
+        cantidadPagos: cantidad,
+      };
+
+      totalHistoricoAdeudo += total;
+      cantidadHistoricoAdeudo += cantidad;
+    });
+
+    // Total de adeudos de todos los años
+    const totalAdeudoHistorico = {
+      totalAdeudo: totalHistoricoAdeudo,
+      cantidadPagos: cantidadHistoricoAdeudo,
+    };
+
     // Construir respuesta optimizada para el frontend
     const dashboardData = {
       // Tarjetas principales del dashboard
@@ -322,6 +360,8 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
       },
       pagosAcumuladosAnio, // Objeto con totales por año { 2024: { total, cantidadPagos }, 2025: {...}, ... }
       totalAcumuladoHistorico, // Total acumulado de todos los años
+      saldosDeudoresPorAnio, // Objeto con adeudos pendientes por año { 2024: { totalAdeudo, cantidadPagos }, 2025: {...}, ... }
+      totalAdeudoHistorico, // Total de adeudos pendientes de todos los años
 
       // Información adicional
       resumen: {
