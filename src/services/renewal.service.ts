@@ -1,6 +1,6 @@
 /**
  * Servicio de Renovaciones de Contrato
- * 
+ *
  * Responsabilidades:
  * - Calcular vigencia actual del contrato
  * - Registrar renovaciones con validaciones
@@ -8,14 +8,9 @@
  * - Evitar renovaciones duplicadas
  */
 
-import { pool } from "../database/connection";
-import { logError, logInfo, logWarning } from "../middlewares/loggingMiddleware";
-import {
-  IContractRenewal,
-  IContractValidity,
-  IRenewalContractRequest,
-  IRenewalContractResponse,
-} from "../models/renewal.interface";
+import { pool } from '../database/connection';
+import { logError, logInfo, logWarning } from '../middlewares/loggingMiddleware';
+import { IContractRenewal, IContractValidity, IRenewalContractRequest, IRenewalContractResponse } from '../models/renewal.interface';
 
 /**
  * Calcula los días restantes entre hoy y una fecha de vencimiento
@@ -28,10 +23,10 @@ export const calculateDaysRemaining = (expirationDate: Date | string | any): num
     if (!expirationDate) {
       return 0;
     }
-    
+
     // Convertir a Date si es string
     let expDateObj: Date;
-    
+
     if (typeof expirationDate === 'string') {
       expDateObj = new Date(expirationDate);
     } else if (expirationDate instanceof Date) {
@@ -39,35 +34,35 @@ export const calculateDaysRemaining = (expirationDate: Date | string | any): num
     } else {
       return 0;
     }
-    
+
     // Validar que sea una fecha válida
     if (isNaN(expDateObj.getTime())) {
-      logWarning("⚠️ Invalid expiration date", { expirationDate });
+      logWarning('⚠️ Invalid expiration date', { expirationDate });
       return 0;
     }
-    
+
     // Validar que la fecha esté en un rango razonable
     const year = expDateObj.getFullYear();
     if (year < 2000 || year > 2099) {
-      logWarning("⚠️ Expiration date out of range", { expirationDate, year });
+      logWarning('⚠️ Expiration date out of range', { expirationDate, year });
       return 0;
     }
-    
+
     // Usar solo la parte de fecha (YYYY-MM-DD) en zona local
     // Hacer una copia para no modificar la original
     const expDate = new Date(expDateObj);
     expDate.setHours(0, 0, 0, 0);
-    
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    
+
     // Calcular diferencia en milisegundos y convertir a días
     const diffTime = expDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     return diffDays;
   } catch (error) {
-    logError(error, "calculateDaysRemaining");
+    logError(error, 'calculateDaysRemaining');
     return 0;
   }
 };
@@ -83,52 +78,52 @@ export const addMonthsToDate = (baseDate: Date | string | any, months: number): 
   try {
     // Validar entrada
     if (!baseDate || !months || months <= 0) {
-      throw new Error("Invalid baseDate or months");
+      throw new Error('Invalid baseDate or months');
     }
-    
+
     const date = new Date(baseDate);
-    
+
     // Validar que la fecha sea válida
     if (isNaN(date.getTime())) {
       throw new Error(`Invalid date: ${baseDate}`);
     }
-    
+
     // Logging para debuggear
-    logInfo("🔢 Adding months to date", {
+    logInfo('🔢 Adding months to date', {
       baseDate,
       months,
       dateObject: date.toISOString(),
       originalMonth: date.getMonth(),
       originalYear: date.getFullYear(),
     });
-    
+
     // Calcular nuevo mes y año correctamente
     let newMonth = date.getMonth() + months;
     let newYear = date.getFullYear();
-    
+
     // Ajustar año y mes si se desborda
     while (newMonth >= 12) {
       newMonth -= 12;
       newYear += 1;
     }
-    
+
     while (newMonth < 0) {
       newMonth += 12;
       newYear -= 1;
     }
-    
+
     date.setFullYear(newYear);
     date.setMonth(newMonth);
-    
-    logInfo("🔢 Result after adding months", {
+
+    logInfo('🔢 Result after adding months', {
       resultDate: date.toISOString(),
       resultMonth: date.getMonth(),
       resultYear: date.getFullYear(),
     });
-    
+
     return date;
   } catch (error) {
-    logError(error, "addMonthsToDate");
+    logError(error, 'addMonthsToDate');
     throw error;
   }
 };
@@ -148,10 +143,10 @@ const extractMonths = (durationString: string): number => {
  */
 const isValidDate = (date: any): boolean => {
   if (!date) return false;
-  
+
   const d = new Date(date);
   if (isNaN(d.getTime())) return false;
-  
+
   // Rechazar fechas muy antiguas (antes de 2000) o muy futuras (después de 2099)
   const year = d.getFullYear();
   return year >= 2000 && year <= 2099;
@@ -161,13 +156,13 @@ const isValidDate = (date: any): boolean => {
  * Obtiene la vigencia actual de un contrato
  * Calcula estado, días restantes y fecha de vencimiento
  * La fecha de vencimiento se obtiene de la última renovación en CONTRACT_RENEWALS
- * 
+ *
  * @param clientId - ID del cliente
  * @returns Objeto IContractValidity con información de vigencia
  * @throws Error si el cliente no existe
  */
 export const getContractValidity = async (clientId: number): Promise<any> => {
-  logInfo("📅 Calculating contract validity", { clientId });
+  logInfo('📅 Calculating contract validity', { clientId });
 
   try {
     // Obtener datos del cliente
@@ -183,7 +178,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
     );
 
     if (clientResult.rowCount === 0) {
-      logWarning("⚠️ Client not found for validity calculation", { clientId });
+      logWarning('⚠️ Client not found for validity calculation', { clientId });
       throw new Error(`Cliente con ID ${clientId} no encontrado`);
     }
 
@@ -191,13 +186,13 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
 
     // Convertir contract_duration a número (puede venir como string o número del SQL)
     const contractDurationMonths = Number(client.contract_duration);
-    
+
     // Validar que los datos del cliente sean válidos
     const hasValidPlacementDate = isValidDate(client.placement_date);
     const hasValidContractDate = isValidDate(client.contract_date);
     const hasValidDuration = contractDurationMonths > 0;
-    
-    logInfo("📋 Client data retrieved", {
+
+    logInfo('📋 Client data retrieved', {
       clientId,
       placement_date: client.placement_date,
       contract_date: client.contract_date,
@@ -210,16 +205,16 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
 
     // Si los datos son inválidos, retornar con valores "N/A"
     if (!hasValidDuration || (!hasValidPlacementDate && !hasValidContractDate)) {
-      logWarning("⚠️ Invalid client contract data", { clientId });
-      
+      logWarning('⚠️ Invalid client contract data', { clientId });
+
       return {
         client_id: client.client_id,
-        placement_date: hasValidPlacementDate ? client.placement_date : "N/A",
-        contract_date: hasValidContractDate ? client.contract_date : "N/A",
-        contract_duration: hasValidDuration ? contractDurationMonths : "N/A",
-        expiration_date: "N/A",
-        months_contracted: "N/A",
-        days_remaining: "N/A",
+        placement_date: hasValidPlacementDate ? client.placement_date : 'N/A',
+        contract_date: hasValidContractDate ? client.contract_date : 'N/A',
+        contract_duration: hasValidDuration ? contractDurationMonths : 'N/A',
+        expiration_date: 'N/A',
+        months_contracted: 'N/A',
+        days_remaining: 'N/A',
         is_active: false,
         last_renewal: undefined,
       };
@@ -258,27 +253,27 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
       [clientId]
     );
 
-    let expirationDate: Date | string = "N/A";
+    let expirationDate: Date | string = 'N/A';
     let lastRenewal: any = undefined;
 
     try {
       if ((lastRenewalResult.rowCount ?? 0) > 0) {
         // Si existe renovación, calcular vencimiento desde la última renovación
         const renewal = lastRenewalResult.rows[0];
-        
+
         // Validar que renewal_date sea válido
         if (!renewal.renewal_date) {
-          throw new Error("renewal_date is null or undefined");
+          throw new Error('renewal_date is null or undefined');
         }
-        
+
         const durationMonths = extractMonths(renewal.renewal_duration);
-        
+
         if (durationMonths <= 0) {
-          throw new Error("Invalid duration months");
+          throw new Error('Invalid duration months');
         }
-        
+
         expirationDate = addMonthsToDate(renewal.renewal_date, durationMonths);
-        
+
         try {
           const renewalDateObj = new Date(renewal.renewal_date);
           if (!isNaN(renewalDateObj.getTime())) {
@@ -288,7 +283,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
             };
           }
         } catch (dateError) {
-          logWarning("⚠️ Could not parse renewal_date", { renewal_date: renewal.renewal_date });
+          logWarning('⚠️ Could not parse renewal_date', { renewal_date: renewal.renewal_date });
         }
       } else {
         // Si no hay renovación, calcular desde placement_date o contract_date
@@ -296,20 +291,18 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
         expirationDate = addMonthsToDate(baseDate, contractDurationMonths);
       }
     } catch (dateError) {
-      logWarning("⚠️ Error calculating expiration date", { clientId, error: dateError });
-      expirationDate = "N/A";
+      logWarning('⚠️ Error calculating expiration date', { clientId, error: dateError });
+      expirationDate = 'N/A';
     }
 
-    const daysRemaining = expirationDate instanceof Date 
-      ? calculateDaysRemaining(expirationDate)
-      : "N/A";
-    
+    const daysRemaining = expirationDate instanceof Date ? calculateDaysRemaining(expirationDate) : 'N/A';
+
     const isActive = typeof daysRemaining === 'number' ? daysRemaining > 0 : false;
 
     const validity: IContractValidity = {
       client_id: client.client_id,
-      placement_date: hasValidPlacementDate ? client.placement_date : "N/A",
-      contract_date: hasValidContractDate ? client.contract_date : "N/A",
+      placement_date: hasValidPlacementDate ? client.placement_date : 'N/A',
+      contract_date: hasValidContractDate ? client.contract_date : 'N/A',
       contract_duration: contractDurationMonths,
       expiration_date: expirationDate instanceof Date ? expirationDate : expirationDate,
       months_contracted: totalMonthsContracted,
@@ -318,7 +311,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
       last_renewal: lastRenewal,
     };
 
-    logInfo("✅ Contract validity calculated successfully", {
+    logInfo('✅ Contract validity calculated successfully', {
       clientId,
       daysRemaining,
       isActive,
@@ -327,26 +320,26 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
 
     return validity;
   } catch (error) {
-    logError(error, "getContractValidity");
+    logError(error, 'getContractValidity');
     throw error;
   }
 };
 
 /**
  * Renueva un contrato agregando meses y registrando la operación
- * 
+ *
  * Flujo:
  * 1. Validar que no exista renovación duplicada el mismo día
  * 2. Obtener la última renovación actual (para saber fecha de vencimiento actual)
  * 3. Calcular nueva fecha de vencimiento
  * 4. Registrar renovación en TABLE CONTRACT_RENEWALS con renewal_duration
  * 5. Retornar respuesta con nuevos valores
- * 
+ *
  * @param request - Datos de renovación (client_id, months_new, renewal_document_url)
  * @returns Respuesta con nueva fecha de vencimiento y meses agregados
  */
 export const renewContract = async (request: IRenewalContractRequest): Promise<IRenewalContractResponse> => {
-  logInfo("🔄 Renewing contract", {
+  logInfo('🔄 Renewing contract', {
     clientId: request.client_id,
     monthsNew: request.months_new,
   });
@@ -354,11 +347,12 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
   const dbClient = await pool.connect();
 
   try {
-    await dbClient.query("BEGIN");
+    await dbClient.query('BEGIN');
 
     const clientId = Number(request.client_id);
     const monthsNew = Number(request.months_new);
-    const renewalDate = request.renewal_date ? new Date(request.renewal_date) : new Date();
+    // Agregar un día a la fecha de renovación para compensar la zona horaria
+    const renewalDate = request.renewal_date ? new Date(new Date(request.renewal_date).getTime() + 24 * 60 * 60 * 1000) : new Date();
 
     // Validación: no permitir renovaciones duplicadas el mismo día
     const duplicateCheck = await dbClient.query(
@@ -368,11 +362,11 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
     );
 
     if (parseInt(duplicateCheck.rows[0].count) > 0) {
-      logWarning("⚠️ Duplicate renewal detected", {
+      logWarning('⚠️ Duplicate renewal detected', {
         clientId,
         renewalDate: renewalDate.toISOString(),
       });
-      throw new Error("Ya existe una renovación registrada para este día");
+      throw new Error('Ya existe una renovación registrada para este día');
     }
 
     // Obtener datos del cliente
@@ -407,7 +401,7 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
 
     // Determinar fecha de vencimiento actual
     let currentExpirationDate: Date;
-    
+
     if ((lastRenewalResult.rowCount ?? 0) > 0) {
       // Si existe renovación anterior, calcular desde ella
       const lastRenewal = lastRenewalResult.rows[0];
@@ -424,7 +418,7 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
 
     // Calcular nueva fecha de vencimiento
     const newExpirationDate = addMonthsToDate(currentExpirationDate, monthsNew);
-    
+
     // Formatar duración como string (ej: "12 meses")
     const renewalDurationString = `${monthsNew} meses`;
 
@@ -434,19 +428,14 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
        (client_id, renewal_date, renewal_duration, renewal_document)
        VALUES ($1, $2, $3, $4)
        RETURNING renewal_id, renewal_date, renewal_duration`,
-      [
-        clientId,
-        renewalDate,
-        renewalDurationString,
-        request.renewal_document_url || null,
-      ]
+      [clientId, renewalDate, renewalDurationString, request.renewal_document_url || null]
     );
 
-    await dbClient.query("COMMIT");
+    await dbClient.query('COMMIT');
 
     const daysRemaining = calculateDaysRemaining(newExpirationDate);
 
-    logInfo("✅ Contract renewed successfully", {
+    logInfo('✅ Contract renewed successfully', {
       clientId,
       newExpirationDate: newExpirationDate.toISOString(),
       daysRemaining,
@@ -454,19 +443,19 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
 
     return {
       success: true,
-      message: "Contrato renovado correctamente",
+      message: 'Contrato renovado correctamente',
       data: {
         client_id: clientId,
-        new_expiration_date: newExpirationDate.toISOString().split("T")[0],
+        new_expiration_date: newExpirationDate.toISOString().split('T')[0],
         days_remaining: daysRemaining,
-        previous_expiration_date: currentExpirationDate.toISOString().split("T")[0],
-        renewal_date: renewalDate.toISOString().split("T")[0],
+        previous_expiration_date: currentExpirationDate.toISOString().split('T')[0],
+        renewal_date: renewalDate.toISOString().split('T')[0],
         months_added: monthsNew,
       },
     };
   } catch (error) {
-    await dbClient.query("ROLLBACK");
-    logError(error, "renewContract");
+    await dbClient.query('ROLLBACK');
+    logError(error, 'renewContract');
     throw error;
   } finally {
     dbClient.release();
@@ -479,7 +468,7 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
  * @returns Array de renovaciones ordenadas por fecha descendente
  */
 export const getRenewalsHistory = async (clientId: number): Promise<IContractRenewal[]> => {
-  logInfo("📜 Fetching renewal history", { clientId });
+  logInfo('📜 Fetching renewal history', { clientId });
 
   try {
     const result = await pool.query(
@@ -499,19 +488,19 @@ export const getRenewalsHistory = async (clientId: number): Promise<IContractRen
     );
 
     const renewals: IContractRenewal[] = (result.rows || [])
-      .filter(row => row.renewal_date && row.renewal_duration) // Filtrar filas con datos inválidos
-      .map(row => {
+      .filter((row) => row.renewal_date && row.renewal_duration) // Filtrar filas con datos inválidos
+      .map((row) => {
         const durationMonths = extractMonths(row.renewal_duration);
-        
-        let newExpirationDate: Date | string = "N/A";
+
+        let newExpirationDate: Date | string = 'N/A';
         try {
           if (durationMonths > 0) {
             newExpirationDate = addMonthsToDate(row.renewal_date, durationMonths);
           }
         } catch (error) {
-          logWarning("⚠️ Error calculating expiration date for renewal", { renewal_id: row.renewal_id });
+          logWarning('⚠️ Error calculating expiration date for renewal', { renewal_id: row.renewal_id });
         }
-        
+
         return {
           renewal_id: row.renewal_id,
           client_id: row.client_id,
@@ -525,14 +514,14 @@ export const getRenewalsHistory = async (clientId: number): Promise<IContractRen
         };
       });
 
-    logInfo("✅ Renewal history retrieved", {
+    logInfo('✅ Renewal history retrieved', {
       clientId,
       count: renewals.length,
     });
 
     return renewals;
   } catch (error) {
-    logError(error, "getRenewalsHistory");
+    logError(error, 'getRenewalsHistory');
     throw error;
   }
 };
