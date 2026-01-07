@@ -14,8 +14,47 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
   });
 
   try {
-    const clientQuery =
-      'SELECT client_id as id, contract_number, court_name, criminal_case, defendant_name as name, placement_date, investigation_file_number, judge_name, lawyer_name, prospect_id, signer_name, status, cancellation_reason, bracelet_type, contract, contract_date, contract_document, contract_duration, payment_day, payment_frequency, registered_at FROM CLIENTS ORDER BY registered_at DESC, client_id';
+    const clientQuery = `
+      SELECT 
+        client_id as id, 
+        contract_number, 
+        court_name, 
+        criminal_case, 
+        defendant_name as name, 
+        placement_date, 
+        investigation_file_number, 
+        judge_name, 
+        lawyer_name, 
+        prospect_id, 
+        signer_name, 
+        status, 
+        cancellation_reason, 
+        bracelet_type, 
+        contract, 
+        contract_date, 
+        contract_document, 
+        contract_duration, 
+        payment_day, 
+        payment_frequency, 
+        registered_at 
+      FROM CLIENTS 
+      ORDER BY 
+        CASE status
+          WHEN 'Colocado' THEN 1
+          WHEN 'Pendiente de colocación' THEN 2
+          WHEN 'Pendiente de audiencia' THEN 3
+          WHEN 'Pendiente de aprobación' THEN 4
+          WHEN 'Cancelado' THEN 5
+          WHEN 'Desinstalado' THEN 6
+          ELSE 7
+        END,
+        contract_number ASC,
+        CASE bracelet_type
+          WHEN 'B1' THEN 1
+          WHEN 'G2' THEN 2
+          ELSE 3
+        END
+    `;
 
     logInfo('🔍 Executing client query', { query: 'SELECT all clients ordered by registered_at DESC' });
     const clientResult = await pool.query(clientQuery);
@@ -449,6 +488,20 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
     logInfo('🔍 Checking if client is a carrier', { clientId: client_id });
     const carrierCheck = await pool.query('SELECT client_id FROM CARRIERS WHERE client_id = $1', [client_id]);
 
+    // Si es carrier y está Colocado, no permitir cambios de estado
+    if (carrierCheck.rowCount && currentClient.status === 'Colocado' && status !== 'Colocado') {
+      logWarning('⚠️ Cannot change status for carrier client that is Colocado', {
+        clientId: client_id,
+        currentStatus: currentClient.status,
+        requestedStatus: status,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'No se puede cambiar el estado de un portador colocado. Debe desinstalarse desde el módulo de portadores.',
+      });
+    }
+
+    // Para carriers: solo permitir Pendiente de colocación o Colocado
     const newStatus = carrierCheck.rowCount ? (status === 'Pendiente de colocación' || status === 'Colocado' ? status : 'Pendiente de colocación') : status;
 
     if (carrierCheck.rowCount && newStatus !== status) {
