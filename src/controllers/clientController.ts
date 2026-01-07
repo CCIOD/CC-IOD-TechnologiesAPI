@@ -1203,7 +1203,7 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
       FROM CONTRACT_RENEWALS r
       LEFT JOIN CONTRACT_PAYMENT_PLANS p ON r.renewal_id = p.renewal_id AND p.contract_type = 'renewal'
       WHERE r.client_id = $1
-      ORDER BY r.renewal_date DESC
+      ORDER BY r.renewal_date ASC
     `;
     const renewalsResult = await pool.query(renewalsQuery, [clientId]);
 
