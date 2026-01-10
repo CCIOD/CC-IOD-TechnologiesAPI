@@ -48,7 +48,7 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
           WHEN 'Desinstalado' THEN 6
           ELSE 7
         END,
-        contract_number ASC,
+        contract_number DESC,
         CASE bracelet_type
           WHEN 'B1' THEN 1
           WHEN 'G2' THEN 2
