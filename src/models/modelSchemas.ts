@@ -157,6 +157,7 @@ export const registerSchema = Joi.object({
 });
 export const updateUserSchema = Joi.object({
   ...name,
+  ...email,
   ...roleIdValidation,
 });
 
@@ -380,7 +381,7 @@ export const createPaymentAdminBatchSchema = Joi.object({
         payment_type: Joi.string().valid('Pago', 'Viático', 'Abono', 'Otro').optional().default('Pago').messages({
           'any.only': 'El tipo debe ser uno de: Pago, Viático, Abono, Otro',
         }),
-      })
+      }),
     )
     .min(1)
     .required()
@@ -439,7 +440,7 @@ export const createBatchPaymentsSchema = Joi.object({
         notes: Joi.string().optional().allow('', null).messages({
           'string.base': 'Las notas deben ser texto',
         }),
-      })
+      }),
     )
     .min(1)
     .required()
