@@ -1100,7 +1100,9 @@ export const uninstallClient = async (req: Request, res: Response, next: NextFun
  * {
  *   "months_new": 6,
  *   "renewal_document_url": "https://storage.azure.com/...",
- *   "renewal_date": "2025-10-28"
+ *   "renewal_date": "2025-10-28",
+ *   "renewal_amount": 15000,      // Opcional: Monto de la renovación
+ *   "payment_frequency": "Mensual" // Opcional: Frecuencia de pago
  * }
  *
  * Respuesta esperada (200):
@@ -1141,6 +1143,8 @@ export const renewContractEndpoint = asyncHandler(async (req: Request, res: Resp
       months_new: req.body.months_new,
       renewal_document_url: req.body.renewal_document_url,
       renewal_date: req.body.renewal_date,
+      renewal_amount: req.body.renewal_amount,
+      payment_frequency: req.body.payment_frequency,
     });
 
     logSuccess('✅ Contract renewed successfully', {
@@ -1268,26 +1272,26 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
         validity.placement_date === 'N/A'
           ? 'N/A'
           : validity.placement_date instanceof Date
-          ? validity.placement_date.toISOString().split('T')[0]
-          : typeof validity.placement_date === 'string'
-          ? new Date(validity.placement_date).toISOString().split('T')[0]
-          : 'N/A',
+            ? validity.placement_date.toISOString().split('T')[0]
+            : typeof validity.placement_date === 'string'
+              ? new Date(validity.placement_date).toISOString().split('T')[0]
+              : 'N/A',
       contract_date:
         validity.contract_date === 'N/A'
           ? 'N/A'
           : validity.contract_date instanceof Date
-          ? validity.contract_date.toISOString().split('T')[0]
-          : typeof validity.contract_date === 'string'
-          ? new Date(validity.contract_date).toISOString().split('T')[0]
-          : 'N/A',
+            ? validity.contract_date.toISOString().split('T')[0]
+            : typeof validity.contract_date === 'string'
+              ? new Date(validity.contract_date).toISOString().split('T')[0]
+              : 'N/A',
       expiration_date:
         validity.expiration_date === 'N/A'
           ? 'N/A'
           : validity.expiration_date instanceof Date
-          ? validity.expiration_date.toISOString().split('T')[0]
-          : typeof validity.expiration_date === 'string'
-          ? new Date(validity.expiration_date).toISOString().split('T')[0]
-          : 'N/A',
+            ? validity.expiration_date.toISOString().split('T')[0]
+            : typeof validity.expiration_date === 'string'
+              ? new Date(validity.expiration_date).toISOString().split('T')[0]
+              : 'N/A',
       contratoOriginal: originalContractResult.rows[0] || null,
       renovaciones: renewalsResult.rows || [],
       totalRenovaciones: renewalsResult.rowCount || 0,
