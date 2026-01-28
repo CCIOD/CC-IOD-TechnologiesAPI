@@ -174,7 +174,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
         contract_duration
        FROM CLIENTS
        WHERE client_id = $1`,
-      [clientId]
+      [clientId],
     );
 
     if (clientResult.rowCount === 0) {
@@ -229,7 +229,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
        FROM CONTRACT_RENEWALS
        WHERE client_id = $1
        ORDER BY renewal_date DESC`,
-      [clientId]
+      [clientId],
     );
 
     // Calcular suma total de meses de renovación
@@ -250,7 +250,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
        WHERE client_id = $1
        ORDER BY renewal_date DESC
        LIMIT 1`,
-      [clientId]
+      [clientId],
     );
 
     let expirationDate: Date | string = 'N/A';
@@ -358,7 +358,7 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
     const duplicateCheck = await dbClient.query(
       `SELECT COUNT(*) as count FROM CONTRACT_RENEWALS
        WHERE client_id = $1 AND DATE(renewal_date) = DATE($2)`,
-      [clientId, renewalDate]
+      [clientId, renewalDate],
     );
 
     if (parseInt(duplicateCheck.rows[0].count) > 0) {
@@ -378,7 +378,7 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
         contract_duration
        FROM CLIENTS
        WHERE client_id = $1`,
-      [clientId]
+      [clientId],
     );
 
     if ((clientDataResult.rowCount ?? 0) === 0) {
@@ -396,7 +396,7 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
        WHERE client_id = $1
        ORDER BY renewal_date DESC
        LIMIT 1`,
-      [clientId]
+      [clientId],
     );
 
     // Determinar fecha de vencimiento actual
@@ -425,11 +425,33 @@ export const renewContract = async (request: IRenewalContractRequest): Promise<I
     // Registrar renovación
     const renewalResult = await dbClient.query(
       `INSERT INTO CONTRACT_RENEWALS 
-       (client_id, renewal_date, renewal_duration, renewal_document)
-       VALUES ($1, $2, $3, $4)
-       RETURNING renewal_id, renewal_date, renewal_duration`,
-      [clientId, renewalDate, renewalDurationString, request.renewal_document_url || null]
+       (client_id, renewal_date, renewal_duration, renewal_document, renewal_amount)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING renewal_id, renewal_date, renewal_duration, renewal_amount`,
+      [clientId, renewalDate, renewalDurationString, request.renewal_document_url || null, request.renewal_amount || null],
     );
+
+    const renewalId = renewalResult.rows[0].renewal_id;
+
+    // Si se proporcionó monto y frecuencia de pago, crear plan de pagos
+    if (request.renewal_amount && request.payment_frequency) {
+      const paymentAmount = request.renewal_amount;
+      const frequency = request.payment_frequency;
+
+      await dbClient.query(
+        `INSERT INTO CONTRACT_PAYMENT_PLANS 
+         (renewal_id, client_id, contract_id, contract_type, contract_amount, contract_start_date, contract_end_date, payment_frequency)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [renewalId, clientId, `renewal-${renewalId}`, 'renewal', paymentAmount, renewalDate, newExpirationDate, frequency],
+      );
+
+      logInfo('💰 Payment plan created for renewal', {
+        renewalId,
+        clientId,
+        amount: paymentAmount,
+        frequency,
+      });
+    }
 
     await dbClient.query('COMMIT');
 
@@ -484,7 +506,7 @@ export const getRenewalsHistory = async (clientId: number): Promise<IContractRen
        FROM CONTRACT_RENEWALS
        WHERE client_id = $1
        ORDER BY renewal_date DESC`,
-      [clientId]
+      [clientId],
     );
 
     const renewals: IContractRenewal[] = (result.rows || [])

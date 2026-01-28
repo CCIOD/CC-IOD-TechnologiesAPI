@@ -1,6 +1,6 @@
 /**
  * Interfaces para el control de vigencia de contrato y renovaciones
- * 
+ *
  * Esta entidad gestiona:
  * - Fechas de inicio, vencimiento y duración de contratos
  * - Registro de renovaciones con documentación
@@ -51,6 +51,8 @@ export interface IRenewalContractRequest {
   months_new: number; // Meses adicionales a agregar
   renewal_document_url?: string; // URL del documento de renovación
   renewal_date?: string; // Fecha de renovación (default: today)
+  renewal_amount?: number; // Monto de la renovación
+  payment_frequency?: string; // Frecuencia de pago (Mensual, Trimestral, etc.)
 }
 
 /**
