@@ -15,31 +15,49 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
 
   try {
     const clientQuery = `
+      WITH last_renewals AS (
+        SELECT 
+          client_id,
+          renewal_date,
+          renewal_duration,
+          ROW_NUMBER() OVER (PARTITION BY client_id ORDER BY renewal_date DESC) as rn
+        FROM CONTRACT_RENEWALS
+      )
       SELECT 
-        client_id as id, 
-        contract_number, 
-        court_name, 
-        criminal_case, 
-        defendant_name as name, 
-        placement_date, 
-        investigation_file_number, 
-        judge_name, 
-        lawyer_name, 
-        prospect_id, 
-        signer_name, 
-        status, 
-        cancellation_reason, 
-        bracelet_type, 
-        contract, 
-        contract_date, 
-        contract_document, 
-        contract_duration, 
-        payment_day, 
-        payment_frequency, 
-        registered_at 
-      FROM CLIENTS 
+        c.client_id as id, 
+        c.contract_number, 
+        c.court_name, 
+        c.criminal_case, 
+        c.defendant_name as name, 
+        c.placement_date, 
+        c.investigation_file_number, 
+        c.judge_name, 
+        c.lawyer_name, 
+        c.prospect_id, 
+        c.signer_name, 
+        c.status, 
+        c.cancellation_reason, 
+        c.bracelet_type, 
+        c.contract, 
+        c.contract_date, 
+        c.contract_document, 
+        c.contract_duration, 
+        c.payment_day, 
+        c.payment_frequency, 
+        c.registered_at,
+        -- Calcular días restantes
+        CASE 
+          WHEN lr.renewal_date IS NOT NULL THEN
+            CEIL(EXTRACT(EPOCH FROM (lr.renewal_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(lr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER) - CURRENT_DATE)) / 86400)
+          WHEN c.placement_date IS NOT NULL THEN
+            CEIL(EXTRACT(EPOCH FROM (c.placement_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) - CURRENT_DATE)) / 86400)
+          ELSE
+            CEIL(EXTRACT(EPOCH FROM (c.contract_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) - CURRENT_DATE)) / 86400)
+        END as dias_restantes
+      FROM CLIENTS c
+      LEFT JOIN last_renewals lr ON c.client_id = lr.client_id AND lr.rn = 1
       ORDER BY 
-        CASE status
+        CASE c.status
           WHEN 'Colocado' THEN 1
           WHEN 'Pendiente de colocación' THEN 2
           WHEN 'Pendiente de audiencia' THEN 3
@@ -48,8 +66,8 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
           WHEN 'Desinstalado' THEN 6
           ELSE 7
         END,
-        contract_number DESC,
-        CASE bracelet_type
+        c.contract_number DESC,
+        CASE c.bracelet_type
           WHEN 'B1' THEN 1
           WHEN 'G2' THEN 2
           ELSE 3
