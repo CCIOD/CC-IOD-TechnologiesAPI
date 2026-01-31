@@ -7,6 +7,8 @@ import {
   deleteClient,
   updateOriginalContractAmount,
   updateRenewalAmount,
+  getPaymentObservations,
+  updatePaymentObservations,
 } from "../controllers/administrationController";
 import {
   getPaymentsByClient,
@@ -104,6 +106,20 @@ router.delete("/clients/:id", deleteClient);
  * @access  Private
  */
 router.put("/clients/:id/original-amount", updateOriginalContractAmount);
+
+/**
+ * @route   GET /api/administration/clients/:id/payment-observations
+ * @desc    Get payment observations for a client
+ * @access  Private
+ */
+router.get("/clients/:id/payment-observations", getPaymentObservations);
+
+/**
+ * @route   PUT /api/administration/clients/:id/payment-observations
+ * @desc    Update payment observations for a client
+ * @access  Private
+ */
+router.put("/clients/:id/payment-observations", updatePaymentObservations);
 
 // ==================== PAYMENTS ====================
 /**

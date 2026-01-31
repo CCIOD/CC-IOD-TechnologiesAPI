@@ -189,7 +189,7 @@ export const getAllClients = async (req: Request, res: Response, next: NextFunct
           renovaciones: renewalsResult.rows,
           totalRenovaciones: renewalsResult.rowCount || 0,
         };
-      })
+      }),
     );
 
     return res.status(200).json({
@@ -637,7 +637,7 @@ export const updateOriginalContractAmount = async (req: Request, res: Response, 
     // Verificar que el cliente existe y obtener información necesaria
     const clientCheck = await pool.query(
       'SELECT client_id, contract_original_amount, contract_date, contract_duration, payment_frequency FROM CLIENTS WHERE client_id = $1',
-      [client_id]
+      [client_id],
     );
 
     if (!clientCheck.rowCount) {
@@ -774,7 +774,7 @@ export const updateRenewalAmount = async (req: Request, res: Response, next: Nex
     // Verificar que la renovación existe
     const renewalCheck = await pool.query(
       'SELECT renewal_id, client_id, renewal_amount, renewal_date, renewal_duration FROM CONTRACT_RENEWALS WHERE renewal_id = $1',
-      [renewal_id]
+      [renewal_id],
     );
 
     if (!renewalCheck.rowCount) {
@@ -891,6 +891,98 @@ export const updateRenewalAmount = async (req: Request, res: Response, next: Nex
     }
   } catch (error: any) {
     console.error('Error al actualizar monto de la renovación:', error);
+    next(error);
+  }
+};
+
+/**
+ * Obtener observaciones de pago del cliente
+ */
+export const getPaymentObservations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+  const client_id = parseInt(req.params.id);
+
+  if (isNaN(client_id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'ID de cliente inválido',
+    });
+  }
+
+  try {
+    // Obtener observaciones de pago del cliente
+    const query = {
+      text: 'SELECT client_id, defendant_name, payment_observations FROM CLIENTS WHERE client_id = $1',
+      values: [client_id],
+    };
+    const result = await pool.query(query);
+
+    if (!result.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontró el cliente especificado.',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Observaciones de pago del cliente',
+      data: {
+        client_id: result.rows[0].client_id,
+        defendant_name: result.rows[0].defendant_name,
+        payment_observations: result.rows[0].payment_observations || null,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error al obtener observaciones de pago:', error);
+    next(error);
+  }
+};
+
+/**
+ * Actualizar observaciones de pago del cliente
+ */
+export const updatePaymentObservations = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+  const client_id = parseInt(req.params.id);
+  const { payment_observations } = req.body;
+
+  if (isNaN(client_id)) {
+    return res.status(400).json({
+      success: false,
+      message: 'ID de cliente inválido',
+    });
+  }
+
+  try {
+    // Verificar que el cliente existe
+    const clientCheck = await pool.query({
+      text: 'SELECT client_id, payment_observations FROM CLIENTS WHERE client_id = $1',
+      values: [client_id],
+    });
+
+    if (!clientCheck.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontró el cliente especificado.',
+      });
+    }
+
+    // Actualizar observaciones de pago
+    const updateQuery = {
+      text: 'UPDATE CLIENTS SET payment_observations = $1 WHERE client_id = $2 RETURNING payment_observations',
+      values: [payment_observations || null, client_id],
+    };
+    const result = await pool.query(updateQuery);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Las observaciones de pago se han actualizado correctamente',
+      data: {
+        client_id,
+        payment_observations: result.rows[0].payment_observations,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error al actualizar observaciones de pago:', error);
     next(error);
   }
 };
