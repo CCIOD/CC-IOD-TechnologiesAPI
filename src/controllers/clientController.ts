@@ -26,6 +26,7 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
       SELECT 
         c.client_id as id, 
         c.contract_number, 
+        c.contract_folio, 
         c.court_name, 
         c.criminal_case, 
         c.defendant_name as name, 
@@ -149,6 +150,7 @@ export const getClientById = asyncHandler(async (req: Request, res: Response, ne
       SELECT 
         client_id as id, 
         contract_number, 
+        contract_folio, 
         court_name, 
         criminal_case, 
         defendant_name as name, 
@@ -223,6 +225,7 @@ export const getClientById = asyncHandler(async (req: Request, res: Response, ne
 export const createClient = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
   const {
     contract_number,
+    contract_folio,
     defendant_name,
     criminal_case,
     investigation_file_number,
@@ -284,9 +287,10 @@ export const createClient = asyncHandler(async (req: Request, res: Response, nex
 
     // Insertar cliente con timestamp de registro automático
     const clientQuery = {
-      text: 'INSERT INTO CLIENTS(contract_number, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, placement_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, bracelet_type, status, prospect_id, contract_original_amount, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, CURRENT_TIMESTAMP) RETURNING client_id',
+      text: 'INSERT INTO CLIENTS(contract_number, contract_folio, defendant_name, criminal_case, investigation_file_number, judge_name, court_name, lawyer_name, signer_name, placement_date, contract_date, contract_document, contract_duration, payment_day, payment_frequency, bracelet_type, status, prospect_id, contract_original_amount, registered_at) VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CURRENT_TIMESTAMP) RETURNING client_id',
       values: [
         contract_number || null,
+        contract_folio || null,
         defendant_name,
         criminal_case,
         invFileOptional,
@@ -443,6 +447,7 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
   const client_id = parseInt(req.params.id);
   const {
     contract_number,
+    contract_folio,
     defendant_name,
     criminal_case,
     investigation_file_number,
@@ -537,9 +542,10 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
     // Actualizar cliente
     logInfo('💾 Updating client data', { clientId: client_id });
     const clientQuery = {
-      text: 'UPDATE CLIENTS SET contract_number=$1, defendant_name=$2, criminal_case=$3, investigation_file_number=$4, judge_name=$5, court_name=$6, lawyer_name=$7, signer_name=$8, placement_date=$9, contract_date=$10, contract_document=$11, contract_duration=$12, payment_day=$13, payment_frequency=$14, bracelet_type=$15, status=$16, cancellation_reason=$17, contract_original_amount=$18 WHERE client_id = $19 RETURNING *',
+      text: 'UPDATE CLIENTS SET contract_number=$1, contract_folio=$2, defendant_name=$3, criminal_case=$4, investigation_file_number=$5, judge_name=$6, court_name=$7, lawyer_name=$8, signer_name=$9, placement_date=$10, contract_date=$11, contract_document=$12, contract_duration=$13, payment_day=$14, payment_frequency=$15, bracelet_type=$16, status=$17, cancellation_reason=$18, contract_original_amount=$19 WHERE client_id = $20 RETURNING *',
       values: [
         contract_number || null,
+        contract_folio || null,
         defendant_name,
         criminal_case,
         invFileOptional,
@@ -576,6 +582,7 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
 
       const fieldsToCheck = [
         { name: 'contract_number', old: currentClient.contract_number, new: contract_number },
+        { name: 'contract_folio', old: currentClient.contract_folio, new: contract_folio },
         { name: 'defendant_name', old: currentClient.defendant_name, new: defendant_name },
         { name: 'criminal_case', old: currentClient.criminal_case, new: criminal_case },
         { name: 'investigation_file_number', old: currentClient.investigation_file_number, new: invFileOptional },
@@ -1322,6 +1329,83 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
     });
   } catch (error) {
     logError(error, 'getContractValidityEndpoint');
+    next(error);
+  }
+});
+
+export const updatePaymentObservations = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+  const client_id = parseInt(req.params.id);
+  const { payment_observations } = req.body;
+
+  logInfo('📝 Updating payment observations', {
+    clientId: client_id,
+    requestedBy: (req as any).user?.email || 'Unknown',
+  });
+
+  if (isNaN(client_id)) {
+    logWarning('❌ Invalid client ID for payment observations update', { providedId: req.params.id });
+    return res.status(400).json({
+      success: false,
+      message: 'ID de cliente inválido',
+    });
+  }
+
+  try {
+    // Verificar que el cliente existe
+    const clientCheck = await pool.query({
+      text: 'SELECT client_id, payment_observations FROM CLIENTS WHERE client_id = $1',
+      values: [client_id],
+    });
+
+    if (!clientCheck.rowCount) {
+      logWarning('📋 Client not found for payment observations update', { clientId: client_id });
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontró el cliente especificado.',
+      });
+    }
+
+    const oldValue = clientCheck.rows[0].payment_observations;
+
+    // Actualizar observaciones de pago
+    logInfo('💾 Updating payment observations in database', { clientId: client_id });
+    const updateQuery = {
+      text: 'UPDATE CLIENTS SET payment_observations = $1 WHERE client_id = $2 RETURNING payment_observations',
+      values: [payment_observations || null, client_id],
+    };
+    const result = await pool.query(updateQuery);
+
+    logSuccess('✅ Payment observations updated successfully', {
+      clientId: client_id,
+    });
+
+    // Registrar cambio en auditoría
+    if ((req as any).user) {
+      await logClientChange({
+        client_id,
+        user_id: (req as any).user.id,
+        user_name: (req as any).user.name || (req as any).user.email,
+        action_type: 'UPDATE',
+        field_name: 'payment_observations',
+        old_value: oldValue,
+        new_value: payment_observations || null,
+        ip_address: (req as any).clientIp,
+        user_agent: req.headers['user-agent'],
+      });
+
+      logInfo('📋 Payment observations change logged to audit', { clientId: client_id });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Las observaciones de pago se han actualizado correctamente',
+      data: {
+        client_id,
+        payment_observations: result.rows[0].payment_observations,
+      },
+    });
+  } catch (error) {
+    logError(error, `updatePaymentObservations - clientId: ${client_id}`);
     next(error);
   }
 });
