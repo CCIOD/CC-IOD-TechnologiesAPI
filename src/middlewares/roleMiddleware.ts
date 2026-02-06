@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, Response } from 'express';
 
 /**
  * Middleware para verificar roles permitidos
@@ -11,14 +11,14 @@ export const checkRole = (allowedRoles: number[]) => {
     if (!user || !user.role) {
       return res.status(401).json({
         success: false,
-        message: "No autorizado. Usuario no autenticado.",
+        message: 'No autorizado. Usuario no autenticado.',
       });
     }
 
     if (!allowedRoles.includes(user.role)) {
       return res.status(403).json({
         success: false,
-        message: "Acceso denegado. No tienes permisos para acceder a este recurso.",
+        message: 'Acceso denegado. No tienes permisos para acceder a este recurso.',
         requiredRoles: allowedRoles,
         yourRole: user.role,
       });
@@ -29,16 +29,13 @@ export const checkRole = (allowedRoles: number[]) => {
 };
 
 /**
- * Middleware específico para el módulo de Administración/Contabilidad
+ * Middleware específico para el módulo de Administración
  * Roles permitidos:
  * - 1: Admin (acceso total)
  * - 2: Director (acceso total a administración)
- * - 4: Contador (acceso exclusivo a administración)
- * 
- * Roles NO permitidos:
- * - 3: Administrativo (sin acceso a administración)
+ * - 3: Administrativo (acceso a administración)
  */
-export const checkAdministrationAccess = checkRole([1, 2, 4]);
+export const checkAdministrationAccess = checkRole([1, 2, 3]);
 
 /**
  * Middleware para verificar si es Admin
@@ -63,4 +60,3 @@ export const checkStaffAccess = checkRole([1, 2, 3]);
  * Roles: 1 (Admin), 2 (Director), 4 (Contador)
  */
 export const checkAccountingAccess = checkRole([1, 2, 4]);
-
