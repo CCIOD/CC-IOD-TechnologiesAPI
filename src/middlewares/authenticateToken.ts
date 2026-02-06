@@ -37,8 +37,8 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
       return res.status(403).json(UNAUTHORIZED);
     }
 
-    // Administradores (role 1) y Administrativos (role 3) pueden acceder a /operations
-    if (route === '/operations' && user.role !== 1 && user.role !== 3) {
+    // Administradores (role 1), Directores (role 2) y Administrativos (role 3) pueden acceder a /operations
+    if (route === '/operations' && user.role !== 1 && user.role !== 2 && user.role !== 3) {
       return res.status(403).json(UNAUTHORIZED);
     }
 
