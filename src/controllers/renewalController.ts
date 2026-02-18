@@ -396,7 +396,34 @@ export const deleteRenewal = async (req: Request, res: Response, next: NextFunct
 
     const renewal_document = renewalCheck.rows[0].renewal_document;
 
-    // Eliminar de la base de datos
+    // Obtener todos los planes de pago asociados a esta renovación
+    const paymentPlansQuery = {
+      text: 'SELECT plan_id FROM CONTRACT_PAYMENT_PLANS WHERE renewal_id = $1',
+      values: [renewal_id],
+    };
+
+    const paymentPlans = await pool.query(paymentPlansQuery);
+
+    // Eliminar todos los pagos asociados a los planes de pago de esta renovación (cascade delete)
+    if (paymentPlans.rowCount && paymentPlans.rowCount > 0) {
+      const planIds = paymentPlans.rows.map((row: any) => row.plan_id);
+
+      // Eliminar pagos
+      const deletePlansPaymentsQuery = {
+        text: `DELETE FROM CONTRACT_PLAN_PAYMENTS WHERE plan_id = ANY($1)`,
+        values: [planIds],
+      };
+      await pool.query(deletePlansPaymentsQuery);
+
+      // Eliminar planes de pago
+      const deletePaymentPlansQuery = {
+        text: 'DELETE FROM CONTRACT_PAYMENT_PLANS WHERE renewal_id = $1',
+        values: [renewal_id],
+      };
+      await pool.query(deletePaymentPlansQuery);
+    }
+
+    // Eliminar la renovación de la base de datos
     const query = {
       text: 'DELETE FROM CONTRACT_RENEWALS WHERE renewal_id = $1',
       values: [renewal_id],
