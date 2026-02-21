@@ -1,5 +1,5 @@
-import { BlobServiceClient, BlockBlobClient } from "@azure/storage-blob";
-import { IAzureUpload } from "../models/azure.interface";
+import { BlobServiceClient, BlockBlobClient, BlobSASPermissions, generateBlobSASQueryParameters, StorageSharedKeyCredential } from '@azure/storage-blob';
+import { IAzureUpload } from '../models/azure.interface';
 
 const AZURE_KEY = process.env.AZURE_STORAGE_CONNECTION_STRING;
 type TResponse = {
@@ -8,13 +8,9 @@ type TResponse = {
 };
 
 // Función auxiliar para reintentos
-const retryOperation = async <T>(
-  operation: () => Promise<T>,
-  maxRetries: number = 3,
-  delay: number = 1000
-): Promise<T> => {
+const retryOperation = async <T>(operation: () => Promise<T>, maxRetries: number = 3, delay: number = 1000): Promise<T> => {
   let lastError: any;
-  
+
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`[Retry] Intento ${attempt}/${maxRetries}`);
@@ -22,43 +18,42 @@ const retryOperation = async <T>(
     } catch (error: any) {
       lastError = error;
       console.error(`[Retry] Intento ${attempt} falló:`, error.message);
-      
+
       // No reintentar en errores que no son temporales
-      if (error.message.includes('authentication') || 
-          error.message.includes('unauthorized') ||
-          error.message.includes('not found') ||
-          error.code === 'BlobAlreadyExists') {
+      if (
+        error.message.includes('authentication') ||
+        error.message.includes('unauthorized') ||
+        error.message.includes('not found') ||
+        error.code === 'BlobAlreadyExists'
+      ) {
         throw error;
       }
-      
+
       if (attempt < maxRetries) {
         console.log(`[Retry] Esperando ${delay}ms antes del siguiente intento...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
         delay *= 2; // Backoff exponencial
       }
     }
   }
-  
+
   throw lastError;
 };
 
-const getBlockBlobClient = (
-  containerName: string,
-  blobName: string
-): BlockBlobClient => {
+const getBlockBlobClient = (containerName: string, blobName: string): BlockBlobClient => {
   if (!AZURE_KEY) {
     console.error('Error: AZURE_STORAGE_CONNECTION_STRING no está configurado');
-    throw new Error("La cadena de conexión de Azure Storage no está configurada en las variables de entorno");
+    throw new Error('La cadena de conexión de Azure Storage no está configurada en las variables de entorno');
   }
 
   if (!containerName) {
     console.error('Error: Nombre de contenedor no proporcionado');
-    throw new Error("Debe especificar un nombre de contenedor");
+    throw new Error('Debe especificar un nombre de contenedor');
   }
 
   if (!blobName) {
     console.error('Error: Nombre de blob no proporcionado');
-    throw new Error("Debe especificar un nombre de archivo");
+    throw new Error('Debe especificar un nombre de archivo');
   }
 
   try {
@@ -69,24 +64,20 @@ const getBlockBlobClient = (
   } catch (error: any) {
     console.error('Error al crear BlobServiceClient:', error);
     if (error.message.includes('connection string')) {
-      throw new Error("La cadena de conexión de Azure Storage es inválida");
+      throw new Error('La cadena de conexión de Azure Storage es inválida');
     }
     throw new Error(`Error al configurar cliente de Azure Storage: ${error.message}`);
   }
 };
 
-export const azureUploadBlob = async ({
-  blob,
-  containerName,
-  folderPath,
-}: IAzureUpload): Promise<TResponse> => {
+export const azureUploadBlob = async ({ blob, containerName, folderPath }: IAzureUpload): Promise<TResponse> => {
   try {
     // Validaciones iniciales
     if (!blob) {
       console.error('Error: No se proporcionó archivo');
       return {
         success: false,
-        message: "No se proporcionó un archivo para subir."
+        message: 'No se proporcionó un archivo para subir.',
       };
     }
 
@@ -94,7 +85,7 @@ export const azureUploadBlob = async ({
       console.error('Error: El archivo no tiene nombre');
       return {
         success: false,
-        message: "El archivo debe tener un nombre válido."
+        message: 'El archivo debe tener un nombre válido.',
       };
     }
 
@@ -102,7 +93,7 @@ export const azureUploadBlob = async ({
       console.error('Error: El archivo está vacío');
       return {
         success: false,
-        message: "El archivo está vacío o corrupto."
+        message: 'El archivo está vacío o corrupto.',
       };
     }
 
@@ -111,14 +102,14 @@ export const azureUploadBlob = async ({
     // Construir nombre del blob con carpeta opcional
     // Sanitizar: remover caracteres especiales, acentos y espacios
     const sanitizedFileName = blob.originalname
-      .normalize('NFD')                          // Descomponer caracteres con acentos
-      .replace(/[\u0300-\u036f]/g, '')           // Remover marcas diacríticas
-      .replace(/[^a-zA-Z0-9._-]/g, '_')          // Reemplazar caracteres especiales con _
-      .replace(/_{2,}/g, '_')                    // Remover guiones bajos múltiples
-      .toLowerCase();                             // Convertir a minúsculas
-    
+      .normalize('NFD') // Descomponer caracteres con acentos
+      .replace(/[\u0300-\u036f]/g, '') // Remover marcas diacríticas
+      .replace(/[^a-zA-Z0-9._-]/g, '_') // Reemplazar caracteres especiales con _
+      .replace(/_{2,}/g, '_') // Remover guiones bajos múltiples
+      .toLowerCase(); // Convertir a minúsculas
+
     const blobName = folderPath ? `${folderPath}/${sanitizedFileName}` : sanitizedFileName;
-    
+
     // Crear cliente con manejo de errores mejorado
     let blockBlobClient: BlockBlobClient;
     try {
@@ -128,7 +119,7 @@ export const azureUploadBlob = async ({
       console.error('Error al crear cliente Azure:', error);
       return {
         success: false,
-        message: `Error de configuración de Azure Storage: ${error.message}`
+        message: `Error de configuración de Azure Storage: ${error.message}`,
       };
     }
 
@@ -138,25 +129,23 @@ export const azureUploadBlob = async ({
     try {
       exists = await retryOperation(async () => {
         const existsPromise = blockBlobClient.exists();
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout al verificar archivo')), 30000)
-        );
-        
+        const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout al verificar archivo')), 30000));
+
         return await Promise.race([existsPromise, timeoutPromise]);
       });
-      
+
       console.log(`[Azure Upload] Archivo existe: ${exists}`);
     } catch (error: any) {
       console.error('Error al verificar existencia del archivo:', error);
       if (error.message.includes('Timeout')) {
         return {
           success: false,
-          message: "Timeout al conectar con Azure Storage. Intente nuevamente."
+          message: 'Timeout al conectar con Azure Storage. Intente nuevamente.',
         };
       }
       return {
         success: false,
-        message: `Error al verificar archivo en Azure: ${error.message}`
+        message: `Error al verificar archivo en Azure: ${error.message}`,
       };
     }
 
@@ -173,13 +162,13 @@ export const azureUploadBlob = async ({
     try {
       await retryOperation(async () => {
         const uploadPromise = blockBlobClient.upload(blob.buffer, blob.size);
-        const timeoutPromise = new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('Timeout en la subida')), 120000) // 2 minutos
+        const timeoutPromise = new Promise<never>(
+          (_, reject) => setTimeout(() => reject(new Error('Timeout en la subida')), 120000), // 2 minutos
         );
-        
+
         return await Promise.race([uploadPromise, timeoutPromise]);
       });
-      
+
       // Verificar que la subida fue exitosa
       const uploadedExists = await blockBlobClient.exists();
       if (!uploadedExists) {
@@ -187,61 +176,56 @@ export const azureUploadBlob = async ({
       }
 
       console.log(`[Azure Upload] Archivo subido exitosamente: ${blockBlobClient.url}`);
-      return { 
-        success: true, 
-        message: blockBlobClient.url 
+      return {
+        success: true,
+        message: blockBlobClient.url,
       };
-
     } catch (error: any) {
       console.error('Error durante la subida:', error);
-      
+
       if (error.message.includes('Timeout')) {
         return {
           success: false,
-          message: "La subida del archivo tardó demasiado. Verifique su conexión e intente con un archivo más pequeño."
+          message: 'La subida del archivo tardó demasiado. Verifique su conexión e intente con un archivo más pequeño.',
         };
       }
-      
+
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNRESET') {
         return {
           success: false,
-          message: "Error de conexión con Azure Storage. Verifique su conexión a internet."
+          message: 'Error de conexión con Azure Storage. Verifique su conexión a internet.',
         };
       }
 
       if (error.message.includes('authentication') || error.message.includes('unauthorized')) {
         return {
           success: false,
-          message: "Error de autenticación con Azure Storage. Verifique la configuración."
+          message: 'Error de autenticación con Azure Storage. Verifique la configuración.',
         };
       }
 
       return {
         success: false,
-        message: `Error al subir archivo: ${error.message || 'Error desconocido'}`
+        message: `Error al subir archivo: ${error.message || 'Error desconocido'}`,
       };
     }
-
   } catch (error: any) {
     console.error('Error general en azureUploadBlob:', error);
-    return { 
-      success: false, 
-      message: `Error inesperado al subir archivo: ${error.message || 'Error desconocido'}` 
+    return {
+      success: false,
+      message: `Error inesperado al subir archivo: ${error.message || 'Error desconocido'}`,
     };
   }
 };
 
-export const azureDeleteBlob = async ({
-  blobname,
-  containerName,
-}: IAzureUpload): Promise<TResponse> => {
+export const azureDeleteBlob = async ({ blobname, containerName }: IAzureUpload): Promise<TResponse> => {
   try {
     // Validaciones iniciales
     if (!blobname) {
       console.error('Error: No se proporcionó nombre de archivo para eliminar');
       return {
         success: false,
-        message: "No se proporcionó el nombre del archivo a eliminar."
+        message: 'No se proporcionó el nombre del archivo a eliminar.',
       };
     }
 
@@ -255,7 +239,7 @@ export const azureDeleteBlob = async ({
       console.error('Error al crear cliente Azure para eliminación:', error);
       return {
         success: false,
-        message: `Error de configuración de Azure Storage: ${error.message}`
+        message: `Error de configuración de Azure Storage: ${error.message}`,
       };
     }
 
@@ -266,7 +250,7 @@ export const azureDeleteBlob = async ({
         console.log(`[Azure Delete] El archivo no existe: ${blobname}`);
         return {
           success: true,
-          message: "El archivo ya no existe en Azure Storage."
+          message: 'El archivo ya no existe en Azure Storage.',
         };
       }
     } catch (error: any) {
@@ -277,53 +261,135 @@ export const azureDeleteBlob = async ({
     // Eliminar archivo con timeout
     try {
       const deletePromise = blockBlobClient.delete();
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error('Timeout en la eliminación')), 30000)
-      );
-      
-      await Promise.race([deletePromise, timeoutPromise]);
-      
-      console.log(`[Azure Delete] Archivo eliminado exitosamente: ${blobname}`);
-      return { 
-        success: true, 
-        message: "El archivo se ha eliminado correctamente." 
-      };
+      const timeoutPromise = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Timeout en la eliminación')), 30000));
 
+      await Promise.race([deletePromise, timeoutPromise]);
+
+      console.log(`[Azure Delete] Archivo eliminado exitosamente: ${blobname}`);
+      return {
+        success: true,
+        message: 'El archivo se ha eliminado correctamente.',
+      };
     } catch (error: any) {
       console.error('Error durante la eliminación:', error);
-      
+
       if (error.message.includes('Timeout')) {
         return {
           success: false,
-          message: "La eliminación del archivo tardó demasiado. Intente nuevamente."
+          message: 'La eliminación del archivo tardó demasiado. Intente nuevamente.',
         };
       }
 
       if (error.code === 'BlobNotFound' || error.message.includes('not found')) {
         return {
           success: true,
-          message: "El archivo ya no existe en Azure Storage."
+          message: 'El archivo ya no existe en Azure Storage.',
         };
       }
-      
+
       if (error.code === 'ENOTFOUND' || error.code === 'ECONNRESET') {
         return {
           success: false,
-          message: "Error de conexión con Azure Storage. El archivo no se pudo eliminar."
+          message: 'Error de conexión con Azure Storage. El archivo no se pudo eliminar.',
         };
       }
 
       return {
         success: false,
-        message: `Error al eliminar archivo: ${error.message || 'Error desconocido'}`
+        message: `Error al eliminar archivo: ${error.message || 'Error desconocido'}`,
       };
     }
-
   } catch (error: any) {
     console.error('Error general en azureDeleteBlob:', error);
-    return { 
-      success: false, 
-      message: `Error inesperado al eliminar archivo: ${error.message || 'Error desconocido'}` 
+    return {
+      success: false,
+      message: `Error inesperado al eliminar archivo: ${error.message || 'Error desconocido'}`,
     };
+  }
+};
+
+/**
+ * Genera una URL de descarga firmada (SAS) para un blob en Azure Storage
+ * @param containerName - Nombre del contenedor
+ * @param blobName - Nombre del blob/archivo
+ * @param expiresInMinutes - Tiempo de expiración en minutos (por defecto 60)
+ * @returns URL firmada para descargar el archivo
+ */
+export const azureGetDownloadUrl = async (containerName: string, blobName: string, expiresInMinutes: number = 60): Promise<string | null> => {
+  try {
+    if (!AZURE_KEY) {
+      console.error('[Azure Download URL] Error: AZURE_STORAGE_CONNECTION_STRING no está configurado');
+      return null;
+    }
+
+    if (!containerName || !blobName) {
+      console.error('[Azure Download URL] Error: containerName o blobName no proporcionado', {
+        containerName,
+        blobName,
+      });
+      return null;
+    }
+
+    console.log(`[Azure Download URL] Generando URL para: ${containerName}/${blobName}`);
+
+    // Extraer credenciales de la connection string
+    const connectionStringParts = AZURE_KEY.split(';').reduce((acc: any, part) => {
+      const [key, ...valueParts] = part.split('=');
+      const value = valueParts.join('='); // Rejoin in case value contains '='
+      if (key && value) acc[key] = value;
+      return acc;
+    }, {});
+
+    const accountName = connectionStringParts['AccountName'];
+    const accountKey = connectionStringParts['AccountKey'];
+
+    if (!accountName || !accountKey) {
+      console.error('[Azure Download URL] Error: No se pudo extraer AccountName o AccountKey', {
+        keys: Object.keys(connectionStringParts),
+      });
+      return null;
+    }
+
+    console.log(`[Azure Download URL] Account name: ${accountName}`);
+
+    const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_KEY);
+    const containerClient = blobServiceClient.getContainerClient(containerName);
+    const blobClient = containerClient.getBlobClient(blobName);
+
+    // Verificar que el blob existe
+    console.log(`[Azure Download URL] Verificando existencia del blob: ${blobName}`);
+    const exists = await blobClient.exists();
+    if (!exists) {
+      console.error(`[Azure Download URL] El archivo no existe: ${blobName}`);
+      return null;
+    }
+
+    console.log(`[Azure Download URL] Blob existe, generando SAS token`);
+
+    // Crear las credenciales compartidas
+    const sharedKeyCredential = new StorageSharedKeyCredential(accountName, accountKey);
+
+    // Definir permisos y tiempo de expiración
+    const startsOn = new Date();
+    const expiresOn = new Date(startsOn.getTime() + expiresInMinutes * 60 * 1000);
+
+    const sasToken = generateBlobSASQueryParameters(
+      {
+        containerName,
+        blobName,
+        permissions: BlobSASPermissions.parse('r'), // Solo lectura
+        startsOn,
+        expiresOn,
+      },
+      sharedKeyCredential,
+    ).toString();
+
+    const sasUrl = `${blobClient.url}?${sasToken}`;
+    console.log(`[Azure Download URL] URL generada exitosamente: ${sasUrl.substring(0, 100)}...`);
+
+    return sasUrl;
+  } catch (error: any) {
+    console.error('[Azure Download URL] Error al generar URL de descarga:', error.message || error);
+    return null;
   }
 };

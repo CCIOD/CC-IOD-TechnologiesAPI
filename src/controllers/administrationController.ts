@@ -7,6 +7,7 @@ import { pool } from '../database/connection';
  * - 'Colocado'
  * - 'Desinstalado'
  * - 'Cancelado'
+ * - 'Traspaso'
  */
 
 /**
@@ -115,7 +116,12 @@ export const getAllClients = async (req: Request, res: Response, next: NextFunct
       )
       SELECT * FROM client_financials
       ${tipoVenta ? `WHERE "tipoVenta" = '${tipoVenta}'` : ''}
-      ORDER BY registered_at DESC
+      ORDER BY 
+        CASE 
+          WHEN estado IN ('Cancelado', 'Desinstalado') THEN 1
+          ELSE 0
+        END,
+        "numeroContrato" DESC
     `;
 
     const result = await pool.query(query, queryParams);
@@ -176,7 +182,7 @@ export const getAllClients = async (req: Request, res: Response, next: NextFunct
           FROM CONTRACT_RENEWALS r
           LEFT JOIN CONTRACT_PAYMENT_PLANS p ON r.renewal_id = p.renewal_id AND p.contract_type = 'renewal'
           WHERE r.client_id = $1
-          ORDER BY r.renewal_date DESC
+          ORDER BY r.renewal_date ASC
         `;
         const renewalsResult = await pool.query(renewalsQuery, [client.client_id]);
 

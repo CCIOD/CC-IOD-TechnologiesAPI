@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, Response } from 'express';
 import {
   carrierSchema,
   clientSchema,
@@ -9,43 +9,42 @@ import {
   updateRenewalSchema,
   createProsecutorDocSchema,
   updateProsecutorDocSchema,
-} from "../models/modelSchemas";
+} from '../models/modelSchemas';
 
 const messageArrValues = (message: string): string => {
-  if (message.includes("information_emails")) {
-    return "Ingrese al menos un correo para información";
+  if (message.includes('information_emails')) {
+    return 'Ingrese al menos un correo para información';
   }
-  if (message.includes("contact_numbers")) {
-    return "Debe agregar al menos un contacto con nombre y teléfono";
+  if (message.includes('contact_numbers')) {
+    return 'Debe agregar al menos un contacto con nombre y teléfono';
   }
-  if (message.includes("contact_name")) {
-    return "El nombre del contacto es obligatorio";
+  if (message.includes('contact_name')) {
+    return 'El nombre del contacto es obligatorio';
   }
-  if (message.includes("phone_number")) {
-    return "El número de teléfono del contacto es obligatorio";
+  if (message.includes('phone_number')) {
+    return 'El número de teléfono del contacto es obligatorio';
   }
-  if (message.includes("relationship")) {
-    return "Debe especificar la relación del contacto (Familiar, Amigo, Abogado, etc.)";
+  if (message.includes('relationship')) {
+    return 'Debe especificar la relación del contacto (Familiar, Amigo, Abogado, etc.)';
   }
-  if (message.includes("act_title")) {
-    return "El título del acta es obligatorio";
+  if (message.includes('act_title')) {
+    return 'El título del acta es obligatorio';
   }
-  if (message.includes("act_description")) {
-    return "La descripción del acta no es válida";
+  if (message.includes('act_description')) {
+    return 'La descripción del acta no es válida';
   }
-  if (message.includes("contract_date")) {
-    return "La fecha del contrato debe ser una fecha válida o puede dejarse vacía";
+  if (message.includes('contract_date')) {
+    return 'La fecha del contrato debe ser una fecha válida o puede dejarse vacía';
+  }
+  if (message.includes('transfer_reason')) {
+    return 'El motivo de traspaso debe ser texto';
   }
   // Para depuración: mostrar el mensaje original si no coincide con ningún patrón conocido
   console.log('Mensaje de validación no manejado:', message);
   return message;
 };
 
-export const validationsProspect = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationsProspect = (req: Request, res: Response, next: NextFunction) => {
   const { error } = prospectSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -54,11 +53,7 @@ export const validationsProspect = (
   next();
 };
 
-export const validationsClient = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationsClient = (req: Request, res: Response, next: NextFunction) => {
   const { error } = clientSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -67,11 +62,7 @@ export const validationsClient = (
   next();
 };
 
-export const validationsCarrier = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationsCarrier = (req: Request, res: Response, next: NextFunction) => {
   const { error } = carrierSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -80,11 +71,7 @@ export const validationsCarrier = (
   next();
 };
 
-export const validationUninstallClient = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationUninstallClient = (req: Request, res: Response, next: NextFunction) => {
   const { error } = uninstallClientSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -93,11 +80,7 @@ export const validationUninstallClient = (
   next();
 };
 
-export const validationCarrierAct = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationCarrierAct = (req: Request, res: Response, next: NextFunction) => {
   const { error } = carrierActSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -107,11 +90,7 @@ export const validationCarrierAct = (
 };
 
 // Validaciones para renovaciones de contrato
-export const validationCreateRenewal = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationCreateRenewal = (req: Request, res: Response, next: NextFunction) => {
   const { error } = createRenewalSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -120,11 +99,7 @@ export const validationCreateRenewal = (
   next();
 };
 
-export const validationUpdateRenewal = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationUpdateRenewal = (req: Request, res: Response, next: NextFunction) => {
   const { error } = updateRenewalSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -134,11 +109,7 @@ export const validationUpdateRenewal = (
 };
 
 // Validaciones para oficios de fiscalía
-export const validationCreateProsecutorDoc = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationCreateProsecutorDoc = (req: Request, res: Response, next: NextFunction) => {
   const { error } = createProsecutorDocSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);
@@ -147,11 +118,7 @@ export const validationCreateProsecutorDoc = (
   next();
 };
 
-export const validationUpdateProsecutorDoc = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const validationUpdateProsecutorDoc = (req: Request, res: Response, next: NextFunction) => {
   const { error } = updateProsecutorDocSchema.validate(req.body);
   if (error) {
     const message = messageArrValues(error.details[0].message);

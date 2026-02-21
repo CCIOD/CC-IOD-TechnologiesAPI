@@ -9,8 +9,9 @@ import { pool } from '../database/connection';
  * - 'Cancelado'
  * - 'Pendiente de audiencia'
  * - 'Pendiente de aprobación'
+ * - 'Traspaso'
  *
- * NOTA: "Clientes activos" se considera 'Pendiente de colocación' + 'Colocado'
+ * NOTA: "Clientes activos" se considera todos EXCEPTO 'Cancelado' y 'Desinstalado'
  */
 
 /**
@@ -22,10 +23,12 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
     const pagosPendientesQuery = `
       SELECT 
         COUNT(*) as cantidad,
-        COALESCE(SUM(scheduled_amount - COALESCE(paid_amount, 0)), 0) as total
-      FROM CONTRACT_PLAN_PAYMENTS
-      WHERE payment_status IN ('Pendiente', 'Parcial')
-        AND scheduled_date >= CURRENT_DATE
+        COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) as total
+      FROM CONTRACT_PLAN_PAYMENTS p
+      INNER JOIN CLIENTS c ON p.client_id = c.client_id
+      WHERE p.payment_status IN ('Pendiente', 'Parcial')
+        AND p.scheduled_date >= CURRENT_DATE
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
     `;
     const pagosPendientesResult = await pool.query(pagosPendientesQuery);
     const pagosPendientes = {
@@ -37,10 +40,12 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
     const pagosVencidosQuery = `
       SELECT 
         COUNT(*) as cantidad,
-        COALESCE(SUM(scheduled_amount - COALESCE(paid_amount, 0)), 0) as adeudo
-      FROM CONTRACT_PLAN_PAYMENTS
-      WHERE payment_status IN ('Pendiente', 'Vencido', 'Parcial')
-        AND scheduled_date < CURRENT_DATE
+        COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) as adeudo
+      FROM CONTRACT_PLAN_PAYMENTS p
+      INNER JOIN CLIENTS c ON p.client_id = c.client_id
+      WHERE p.payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+        AND p.scheduled_date < CURRENT_DATE
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
     `;
     const pagosVencidosResult = await pool.query(pagosVencidosQuery);
     const pagosVencidos = {
@@ -62,6 +67,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
       WHERE placement_date IS NOT NULL
         AND contract_duration IS NOT NULL
         AND contract_duration != ''
+        AND status NOT IN ('Cancelado', 'Desinstalado')
     `;
     const contratosVencimientoResult = await pool.query(contratosVencimientoQuery);
 
@@ -90,26 +96,30 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
     const clientesActivosQuery = `
       SELECT COUNT(*) as total
       FROM CLIENTS
-      WHERE status IN ('Pendiente de colocación', 'Colocado')
+      WHERE status NOT IN ('Cancelado', 'Desinstalado')
     `;
     const clientesActivosResult = await pool.query(clientesActivosQuery);
     const totalClientesActivos = parseInt(clientesActivosResult.rows[0].total || 0);
 
     // 6. Adeudo total pendiente (suma de todos los adeudos)
     const adeudoTotalQuery = `
-      SELECT COALESCE(SUM(scheduled_amount - COALESCE(paid_amount, 0)), 0) as total
-      FROM CONTRACT_PLAN_PAYMENTS
-      WHERE payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+      SELECT COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) as total
+      FROM CONTRACT_PLAN_PAYMENTS p
+      INNER JOIN CLIENTS c ON p.client_id = c.client_id
+      WHERE p.payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
     `;
     const adeudoTotalResult = await pool.query(adeudoTotalQuery);
     const adeudoTotalPendiente = parseFloat(adeudoTotalResult.rows[0].total || 0);
 
     // 7. Pagos programados para esta semana
     const pagosSemanaQuery = `
-      SELECT COUNT(*) as total, COALESCE(SUM(scheduled_amount), 0) as monto
-      FROM CONTRACT_PLAN_PAYMENTS
-      WHERE scheduled_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
-        AND payment_status IN ('Pendiente', 'Parcial')
+      SELECT COUNT(*) as total, COALESCE(SUM(p.scheduled_amount), 0) as monto
+      FROM CONTRACT_PLAN_PAYMENTS p
+      INNER JOIN CLIENTS c ON p.client_id = c.client_id
+      WHERE p.scheduled_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '7 days'
+        AND p.payment_status IN ('Pendiente', 'Parcial')
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
     `;
     const pagosSemanaResult = await pool.query(pagosSemanaQuery);
     const pagosProgramadosSemana = {
@@ -126,7 +136,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
         END as tipo,
         COUNT(*) as total
       FROM CLIENTS
-      WHERE status IN ('Pendiente de colocación', 'Colocado')
+      WHERE status NOT IN ('Cancelado', 'Desinstalado')
       GROUP BY tipo
     `;
     const clientesTipoVentaResult = await pool.query(clientesTipoVentaQuery);
@@ -135,7 +145,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
         acc[row.tipo] = parseInt(row.total);
         return acc;
       },
-      { Contado: 0, Crédito: 0 }
+      { Contado: 0, Crédito: 0 },
     );
 
     // 9. Últimos pagos realizados (5 más recientes)
@@ -169,7 +179,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
       FROM CLIENTS c
       LEFT JOIN CONTRACT_PLAN_PAYMENTS p ON c.client_id = p.client_id 
         AND p.payment_status IN ('Pendiente', 'Vencido', 'Parcial')
-      WHERE c.status IN ('Pendiente de colocación', 'Colocado')
+      WHERE c.status NOT IN ('Cancelado', 'Desinstalado')
       GROUP BY c.client_id, c.defendant_name, c.contract_number
       HAVING COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) > 0
       ORDER BY adeudo DESC
@@ -193,6 +203,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
       WHERE c.placement_date IS NOT NULL
         AND c.contract_duration IS NOT NULL
         AND c.contract_duration != ''
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
         AND c.placement_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) < CURRENT_DATE
       ORDER BY "fechaVencimiento" ASC
       LIMIT 10
@@ -215,6 +226,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
       WHERE c.placement_date IS NOT NULL
         AND c.contract_duration IS NOT NULL
         AND c.contract_duration != ''
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
         AND c.placement_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) >= CURRENT_DATE
         AND c.placement_date + INTERVAL '1 month' * CAST(REGEXP_REPLACE(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) <= CURRENT_DATE + INTERVAL '30 days'
       ORDER BY "fechaVencimiento" ASC
@@ -229,7 +241,7 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
         COALESCE(bracelet_type, 'Sin especificar') as "tipoBrazalete",
         COUNT(*) as total
       FROM CLIENTS
-      WHERE status IN ('Pendiente de colocación', 'Colocado')
+      WHERE status NOT IN ('Cancelado', 'Desinstalado')
       GROUP BY bracelet_type
       ORDER BY total DESC
     `;
@@ -304,12 +316,14 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
     // 18. Saldos deudores pendientes de pago por año
     const saldosDeudoresPorAnioQuery = `
       SELECT 
-        EXTRACT(YEAR FROM scheduled_date) as anio,
+        EXTRACT(YEAR FROM p.scheduled_date) as anio,
         COUNT(*) as "cantidadPagos",
-        COALESCE(SUM(scheduled_amount - COALESCE(paid_amount, 0)), 0) as "totalAdeudo"
-      FROM CONTRACT_PLAN_PAYMENTS
-      WHERE payment_status IN ('Pendiente', 'Vencido', 'Parcial')
-      GROUP BY EXTRACT(YEAR FROM scheduled_date)
+        COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) as "totalAdeudo"
+      FROM CONTRACT_PLAN_PAYMENTS p
+      INNER JOIN CLIENTS c ON p.client_id = c.client_id
+      WHERE p.payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+        AND c.status NOT IN ('Cancelado', 'Desinstalado')
+      GROUP BY EXTRACT(YEAR FROM p.scheduled_date)
       ORDER BY anio DESC
     `;
     const saldosDeudoresPorAnioResult = await pool.query(saldosDeudoresPorAnioQuery);
