@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from 'express';
 import { pool } from '../database/connection';
-import { azureDeleteBlob, azureUploadBlob } from '../services/azure.service';
+import { azureDeleteBlob, azureUploadBlob, azureGetDownloadUrl } from '../services/azure.service';
 import { getBlobName } from '../helpers/helpers';
 import { logClientChange } from '../services/audit.service';
 import { logError, logSuccess, logInfo, logWarning } from '../middlewares/loggingMiddleware';
@@ -38,6 +38,7 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
         c.signer_name, 
         c.status, 
         c.cancellation_reason, 
+        c.transfer_reason,
         c.bracelet_type, 
         c.contract, 
         c.contract_date, 
@@ -58,14 +59,9 @@ export const getAllClients = asyncHandler(async (req: Request, res: Response, ne
       FROM CLIENTS c
       LEFT JOIN last_renewals lr ON c.client_id = lr.client_id AND lr.rn = 1
       ORDER BY 
-        CASE c.status
-          WHEN 'Colocado' THEN 1
-          WHEN 'Pendiente de colocación' THEN 2
-          WHEN 'Pendiente de audiencia' THEN 3
-          WHEN 'Pendiente de aprobación' THEN 4
-          WHEN 'Cancelado' THEN 5
-          WHEN 'Desinstalado' THEN 6
-          ELSE 7
+        CASE 
+          WHEN c.status IN ('Cancelado', 'Desinstalado') THEN 1
+          ELSE 0
         END,
         c.contract_number DESC,
         CASE c.bracelet_type
@@ -162,6 +158,7 @@ export const getClientById = asyncHandler(async (req: Request, res: Response, ne
         signer_name, 
         status,
         cancellation_reason,
+        transfer_reason,
         bracelet_type,
         contract, 
         contract_date, 
@@ -466,6 +463,7 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
     observations,
     status,
     cancellation_reason,
+    transfer_reason,
     prospect_id,
     contract_original_amount,
   } = req.body;
@@ -542,7 +540,7 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
     // Actualizar cliente
     logInfo('💾 Updating client data', { clientId: client_id });
     const clientQuery = {
-      text: 'UPDATE CLIENTS SET contract_number=$1, contract_folio=$2, defendant_name=$3, criminal_case=$4, investigation_file_number=$5, judge_name=$6, court_name=$7, lawyer_name=$8, signer_name=$9, placement_date=$10, contract_date=$11, contract_document=$12, contract_duration=$13, payment_day=$14, payment_frequency=$15, bracelet_type=$16, status=$17, cancellation_reason=$18, contract_original_amount=$19 WHERE client_id = $20 RETURNING *',
+      text: 'UPDATE CLIENTS SET contract_number=$1, contract_folio=$2, defendant_name=$3, criminal_case=$4, investigation_file_number=$5, judge_name=$6, court_name=$7, lawyer_name=$8, signer_name=$9, placement_date=$10, contract_date=$11, contract_document=$12, contract_duration=$13, payment_day=$14, payment_frequency=$15, bracelet_type=$16, status=$17, cancellation_reason=$18, transfer_reason=$19, contract_original_amount=$20 WHERE client_id = $21 RETURNING *',
       values: [
         contract_number || null,
         contract_folio || null,
@@ -562,6 +560,7 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
         bracelet_type || null,
         newStatus,
         cancellation_reason || null,
+        transfer_reason || null,
         contract_original_amount || null,
         client_id,
       ],
@@ -599,6 +598,7 @@ export const updateClient = asyncHandler(async (req: Request, res: Response, nex
         { name: 'bracelet_type', old: currentClient.bracelet_type, new: bracelet_type },
         { name: 'status', old: currentClient.status, new: newStatus },
         { name: 'cancellation_reason', old: currentClient.cancellation_reason, new: cancellation_reason },
+        { name: 'transfer_reason', old: currentClient.transfer_reason, new: transfer_reason },
       ];
 
       let changesCount = 0;
@@ -1163,10 +1163,53 @@ export const renewContractEndpoint = asyncHandler(async (req: Request, res: Resp
   }
 
   try {
+    let renewal_document_url: string | null = null;
+
+    // Si hay un archivo, subirlo a Azure
+    if (req.file) {
+      const file = req.file;
+      const containerName = 'contract-renewals';
+      const folderPath = `client-${clientId}`;
+
+      logInfo('📄 Uploading renewal document to Azure', {
+        clientId,
+        fileName: file.originalname,
+        containerName,
+      });
+
+      const uploadResult = await azureUploadBlob({
+        blob: file,
+        containerName: containerName,
+        folderPath: folderPath,
+      });
+
+      if (!uploadResult.success) {
+        logError(`Failed to upload renewal document: ${uploadResult.message}`, 'renewContractEndpoint');
+        return res.status(500).json({
+          success: false,
+          message: `Error al subir el documento: ${uploadResult.message}`,
+        });
+      }
+
+      // Sanitizar el nombre del archivo de la misma forma que Azure lo hace
+      const sanitizedFileName = file.originalname
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_{2,}/g, '_')
+        .toLowerCase();
+
+      renewal_document_url = `${folderPath}/${sanitizedFileName}`;
+      logSuccess('✅ Renewal document uploaded to Azure', {
+        clientId,
+        documentUrl: renewal_document_url,
+      });
+    }
+
     const response = await renewContract({
       client_id: String(clientId),
       months_new: req.body.months_new,
-      renewal_document_url: req.body.renewal_document_url,
+      renewal_document_url: renewal_document_url || req.body.renewal_document_url,
       renewal_date: req.body.renewal_date,
       renewal_amount: req.body.renewal_amount,
       payment_frequency: req.body.payment_frequency,
@@ -1273,6 +1316,7 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
         r.renewal_date as "fechaRenovacion",
         r.renewal_duration as "duracionRenovacion",
         r.renewal_amount as "montoRenovacion",
+        r.renewal_document as "documentoRenovacion",
         r.created_at as "fechaCreacion",
         r.updated_at as "fechaActualizacion",
         p.payment_frequency as "frecuenciaPago",
@@ -1288,6 +1332,41 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
       ORDER BY r.renewal_date ASC
     `;
     const renewalsResult = await pool.query(renewalsQuery, [clientId]);
+
+    // Generar URLs de descarga para los documentos de renovación
+    const renewalsWithUrls = await Promise.all(
+      (renewalsResult.rows || []).map(async (renewal: any) => {
+        if (renewal.documentoRenovacion) {
+          logInfo('🔗 Generating download URL for renewal document', {
+            clientId,
+            renewalId: renewal.id,
+            blobName: renewal.documentoRenovacion,
+          });
+
+          const downloadUrl = await azureGetDownloadUrl('contract-renewals', renewal.documentoRenovacion, 60);
+
+          if (downloadUrl) {
+            logSuccess('✅ Download URL generated successfully', {
+              renewalId: renewal.id,
+            });
+          } else {
+            logWarning('⚠️ Failed to generate download URL', {
+              renewalId: renewal.id,
+              blobName: renewal.documentoRenovacion,
+            });
+          }
+
+          return {
+            ...renewal,
+            urlDescarga: downloadUrl,
+          };
+        }
+        return {
+          ...renewal,
+          urlDescarga: null,
+        };
+      }),
+    );
 
     // Convertir fechas a formato YYYY-MM-DD para consistencia
     // Pero validar primero que sean fechas válidas
@@ -1318,8 +1397,8 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
               ? new Date(validity.expiration_date).toISOString().split('T')[0]
               : 'N/A',
       contratoOriginal: originalContractResult.rows[0] || null,
-      renovaciones: renewalsResult.rows || [],
-      totalRenovaciones: renewalsResult.rowCount || 0,
+      renovaciones: renewalsWithUrls,
+      totalRenovaciones: renewalsWithUrls.length,
     };
 
     return res.status(200).json({
@@ -1329,6 +1408,144 @@ export const getContractValidityEndpoint = asyncHandler(async (req: Request, res
     });
   } catch (error) {
     logError(error, 'getContractValidityEndpoint');
+    next(error);
+  }
+});
+
+/**
+ * PATCH /clientes/:id/renovaciones/:renewal_id
+ *
+ * Actualiza el documento de una renovación existente
+ * Útil cuando una renovación se creó sin documento o el documento está mal
+ */
+export const updateRenewalDocument = asyncHandler(async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+  const clientId = parseInt(req.params.id);
+  const renewalId = parseInt(req.params.renewal_id);
+
+  logInfo('📄 Updating renewal document', {
+    clientId,
+    renewalId,
+    requestedBy: (req as any).user?.email || 'Unknown',
+    hasFile: !!req.file,
+  });
+
+  if (isNaN(clientId) || isNaN(renewalId)) {
+    logWarning('❌ Invalid IDs provided', { clientId: req.params.id, renewalId: req.params.renewal_id });
+    return res.status(400).json({
+      success: false,
+      message: 'ID de cliente o renovación inválido',
+    });
+  }
+
+  if (!req.file) {
+    logWarning('❌ No file provided for renewal document update', { clientId, renewalId });
+    return res.status(400).json({
+      success: false,
+      message: 'Debe proporcionar un archivo para actualizar',
+    });
+  }
+
+  try {
+    // Verificar que la renovación existe y pertenece al cliente
+    const renewalCheck = await pool.query(
+      `SELECT renewal_id, client_id, renewal_document 
+       FROM CONTRACT_RENEWALS 
+       WHERE renewal_id = $1 AND client_id = $2`,
+      [renewalId, clientId],
+    );
+
+    if (renewalCheck.rowCount === 0) {
+      logWarning('📋 Renewal not found', { clientId, renewalId });
+      return res.status(404).json({
+        success: false,
+        message: 'No se encontró la renovación especificada para este cliente',
+      });
+    }
+
+    const oldDocument = renewalCheck.rows[0].renewal_document;
+
+    // Subir el nuevo archivo a Azure
+    const file = req.file;
+    const containerName = 'contract-renewals';
+    const folderPath = `client-${clientId}`;
+
+    logInfo('☁️ Uploading document to Azure', {
+      clientId,
+      renewalId,
+      fileName: file.originalname,
+      fileSize: file.size,
+    });
+
+    const uploadResult = await azureUploadBlob({
+      blob: file,
+      containerName: containerName,
+      folderPath: folderPath,
+    });
+
+    if (!uploadResult.success) {
+      logError(`Failed to upload renewal document: ${uploadResult.message}`, 'updateRenewalDocument');
+      return res.status(500).json({
+        success: false,
+        message: `Error al subir el documento: ${uploadResult.message}`,
+      });
+    }
+
+    // Sanitizar el nombre del archivo de la misma forma que Azure lo hace
+    const sanitizedFileName = file.originalname
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .replace(/_{2,}/g, '_')
+      .toLowerCase();
+
+    const renewal_document_url = `${folderPath}/${sanitizedFileName}`;
+
+    // Actualizar la base de datos
+    const updateQuery = `
+      UPDATE CONTRACT_RENEWALS 
+      SET renewal_document = $1, updated_at = CURRENT_TIMESTAMP
+      WHERE renewal_id = $2 AND client_id = $3
+      RETURNING renewal_id, renewal_document, updated_at
+    `;
+
+    const updateResult = await pool.query(updateQuery, [renewal_document_url, renewalId, clientId]);
+
+    logSuccess('✅ Renewal document updated successfully', {
+      clientId,
+      renewalId,
+      documentUrl: renewal_document_url,
+      oldDocument,
+    });
+
+    // Registrar en auditoría
+    if ((req as any).user) {
+      await logClientChange({
+        client_id: clientId,
+        user_id: (req as any).user.id,
+        user_name: (req as any).user.name || (req as any).user.email,
+        action_type: 'RENEWAL_DOCUMENT_UPDATE',
+        new_value: `Documento de renovación #${renewalId} actualizado: ${file.originalname}`,
+        old_value: oldDocument ? `Documento anterior: ${oldDocument}` : 'Sin documento previo',
+        ip_address: (req as any).clientIp,
+        user_agent: req.headers['user-agent'],
+      });
+    }
+
+    // Generar URL de descarga
+    const downloadUrl = await azureGetDownloadUrl('contract-renewals', renewal_document_url, 60);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Documento de renovación actualizado correctamente',
+      data: {
+        renewal_id: updateResult.rows[0].renewal_id,
+        document: updateResult.rows[0].renewal_document,
+        download_url: downloadUrl,
+        updated_at: updateResult.rows[0].updated_at,
+      },
+    });
+  } catch (error) {
+    logError(error, 'updateRenewalDocument');
     next(error);
   }
 });

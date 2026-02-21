@@ -33,7 +33,10 @@ export const checkRole = (allowedRoles: number[]) => {
  * Roles permitidos:
  * - 1: Admin (acceso total)
  * - 2: Director (acceso total a administración)
- * - 3: Administrativo (acceso a administración)
+ * - 4: Seguimiento (acceso a administración)
+ *
+ * Roles NO permitidos:
+ * - 3: Administrativo (sin acceso a administración)
  */
 export const checkAdministrationAccess = checkRole([1, 2, 3]);
 
@@ -57,6 +60,6 @@ export const checkStaffAccess = checkRole([1, 2, 3]);
 
 /**
  * Middleware para verificar acceso a módulos contables
- * Roles: 1 (Admin), 2 (Director), 4 (Contador)
+ * Roles: 1 (Admin), 2 (Director), 4 (Seguimiento)
  */
 export const checkAccountingAccess = checkRole([1, 2, 4]);

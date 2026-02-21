@@ -225,7 +225,8 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
       `SELECT 
         renewal_id,
         renewal_date,
-        renewal_duration
+        renewal_duration,
+        renewal_document
        FROM CONTRACT_RENEWALS
        WHERE client_id = $1
        ORDER BY renewal_date DESC`,
@@ -245,7 +246,8 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
       `SELECT 
         renewal_id,
         renewal_date,
-        renewal_duration
+        renewal_duration,
+        renewal_document
        FROM CONTRACT_RENEWALS
        WHERE client_id = $1
        ORDER BY renewal_date DESC
@@ -280,6 +282,7 @@ export const getContractValidity = async (clientId: number): Promise<any> => {
             lastRenewal = {
               renewal_date: renewalDateObj,
               months_added: durationMonths,
+              renewal_document: renewal.renewal_document || null,
             };
           }
         } catch (dateError) {

@@ -115,11 +115,14 @@ export const clientSchema = Joi.object({
   }),
   payment_frequency: paymentFrequencyValidation.optional(),
   status: statusValidation({
-    allowedValues: ['Pendiente de aprobación', 'Pendiente de audiencia', 'Pendiente de colocación', 'Colocado', 'Desinstalado', 'Cancelado'],
+    allowedValues: ['Pendiente de aprobación', 'Pendiente de audiencia', 'Pendiente de colocación', 'Colocado', 'Desinstalado', 'Cancelado', 'Traspaso'],
     field: 'estado',
   }),
   cancellation_reason: Joi.string().optional().allow('', null).messages({
     'string.base': 'El motivo de cancelación debe ser texto',
+  }),
+  transfer_reason: Joi.string().optional().allow('', null).messages({
+    'string.base': 'El motivo de traspaso debe ser texto',
   }),
   observations: Joi.array().items(observationSchema).optional(),
   prospect_id: fieldIdValidation({

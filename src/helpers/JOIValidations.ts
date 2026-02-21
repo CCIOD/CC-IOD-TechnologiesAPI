@@ -56,8 +56,8 @@ export const statusValidation = ({ allowedValues, field }: Params) => {
     values?.length === 1
       ? values[0]
       : values?.length === 2
-      ? `${values[0]} o ${values[1]}`
-      : `${values!.slice(0, -1).join(', ')} o ${values![values!.length - 1]}`;
+        ? `${values[0]} o ${values[1]}`
+        : `${values!.slice(0, -1).join(', ')} o ${values![values!.length - 1]}`;
   return JOI.messages({
     'any.required': `El ${field} es obligatorio`,
     'string.base': `El ${field} debe ser un texto.`,
@@ -121,7 +121,7 @@ export const observationsValidation = {
 export const roleIdValidation = {
   role_id: Joi.number().valid(2, 3, 4).integer().optional().messages({
     'number.base': 'El rol debe ser un número.',
-    'any.only': 'El rol debe ser Director, Administrativo o Contador',
+    'any.only': 'El rol debe ser Director, Administrativo o Seguimiento',
     'number.integer': 'El rol debe ser un número entero.',
   }),
 };
@@ -139,25 +139,23 @@ export const passwordValidation = {
 };
 
 // Validaciones adicionales para clientes
-export const contractNumberValidation = Joi.string()
-  .required()
-  .messages({
-    'string.base': 'El número de contrato debe ser texto',
-    'string.empty': 'El número de contrato no puede estar vacío',
-    'any.required': 'El número de contrato es obligatorio',
-  });
+export const contractNumberValidation = Joi.string().required().messages({
+  'string.base': 'El número de contrato debe ser texto',
+  'string.empty': 'El número de contrato no puede estar vacío',
+  'any.required': 'El número de contrato es obligatorio',
+});
 
 export const contactWithDetailsValidation = Joi.array()
   .items(
     Joi.object({
       phone: phoneValidation,
-      name: stringValidation("nombre del contacto"),
+      name: stringValidation('nombre del contacto'),
       relationship_id: fieldIdValidation({
-        field: "parentesco",
+        field: 'parentesco',
         allowedValues: [1, 2],
-        allowedMsg: "Familiar o Abogado",
+        allowedMsg: 'Familiar o Abogado',
       }),
-    })
+    }),
   )
   .min(1)
   .required()
@@ -167,35 +165,23 @@ export const contactWithDetailsValidation = Joi.array()
     'array.min': 'Debe haber al menos un contacto.',
   });
 
-export const contractDurationValidation = Joi.number()
-  .integer()
-  .positive()
-  .max(60)
-  .required()
-  .messages({
-    'number.base': 'La duración del contrato debe ser un número',
-    'number.integer': 'La duración del contrato debe ser un número entero',
-    'number.positive': 'La duración del contrato debe ser positiva',
-    'number.max': 'La duración del contrato no puede exceder 60 meses',
-    'any.required': 'La duración del contrato es obligatoria',
-  });
+export const contractDurationValidation = Joi.number().integer().positive().max(60).required().messages({
+  'number.base': 'La duración del contrato debe ser un número',
+  'number.integer': 'La duración del contrato debe ser un número entero',
+  'number.positive': 'La duración del contrato debe ser positiva',
+  'number.max': 'La duración del contrato no puede exceder 60 meses',
+  'any.required': 'La duración del contrato es obligatoria',
+});
 
-export const paymentDayValidation = Joi.number()
-  .integer()
-  .min(1)
-  .max(31)
-  .required()
-  .messages({
-    'number.base': 'El día de pago debe ser un número',
-    'number.integer': 'El día de pago debe ser un número entero',
-    'number.min': 'El día de pago debe ser entre 1 y 31',
-    'number.max': 'El día de pago debe ser entre 1 y 31',
-    'any.required': 'El día de pago es obligatorio',
-  });
+export const paymentDayValidation = Joi.number().integer().min(1).max(31).required().messages({
+  'number.base': 'El día de pago debe ser un número',
+  'number.integer': 'El día de pago debe ser un número entero',
+  'number.min': 'El día de pago debe ser entre 1 y 31',
+  'number.max': 'El día de pago debe ser entre 1 y 31',
+  'any.required': 'El día de pago es obligatorio',
+});
 
-export const paymentFrequencyValidation = Joi.string()
-  .valid('Mensual', 'Bimestral', 'Trimestral', 'Semestral', 'Contado')
-  .messages({
-    'string.base': 'La frecuencia de pago debe ser texto',
-    'any.only': 'La frecuencia de pago debe ser: Mensual, Bimestral, Trimestral, Semestral o Contado',
-  });
+export const paymentFrequencyValidation = Joi.string().valid('Mensual', 'Bimestral', 'Trimestral', 'Semestral', 'Contado').messages({
+  'string.base': 'La frecuencia de pago debe ser texto',
+  'any.only': 'La frecuencia de pago debe ser: Mensual, Bimestral, Trimestral, Semestral o Contado',
+});
