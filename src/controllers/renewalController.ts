@@ -188,7 +188,7 @@ export const updateRenewal = async (req: Request, res: Response, next: NextFunct
     const oldDocument = renewalCheck.rows[0].renewal_document;
     let renewal_document = oldDocument;
 
-    // Si hay un nuevo archivo, subirlo a Azure y eliminar el anterior
+    // Si hay un nuevo archivo, gestionar documento en Azure
     if (req.file) {
       const file = req.file;
       const containerName = 'contract-renewals';
@@ -198,6 +198,19 @@ export const updateRenewal = async (req: Request, res: Response, next: NextFunct
       const client_id = clientQuery.rows[0].client_id;
       const folderPath = `client-${client_id}`;
 
+      // Si ya existe un documento, eliminarlo primero
+      if (oldDocument) {
+        try {
+          await azureDeleteBlob({
+            blobname: oldDocument,
+            containerName: containerName,
+          });
+        } catch (deleteError) {
+          console.error('Error al eliminar documento anterior:', deleteError);
+        }
+      }
+
+      // Subir el nuevo documento
       const uploadResult = await azureUploadBlob({
         blob: file,
         containerName: containerName,
@@ -212,18 +225,6 @@ export const updateRenewal = async (req: Request, res: Response, next: NextFunct
       }
 
       renewal_document = `${folderPath}/${file.originalname.replace(/ /g, '_')}`;
-
-      // Eliminar el documento anterior si existe
-      if (oldDocument) {
-        try {
-          await azureDeleteBlob({
-            blobname: oldDocument,
-            containerName: containerName,
-          });
-        } catch (deleteError) {
-          console.error('Error al eliminar documento anterior:', deleteError);
-        }
-      }
     }
 
     // Construir query dinámico
@@ -446,6 +447,56 @@ export const deleteRenewal = async (req: Request, res: Response, next: NextFunct
     return res.status(200).json({
       success: true,
       message: 'Renovación eliminada correctamente',
+    });
+  } catch (error: any) {
+    next(error);
+  }
+};
+
+/**
+ * Eliminar solo el archivo de una renovación
+ */
+export const deleteRenewalFile = async (req: Request, res: Response, next: NextFunction): Promise<Response | void> => {
+  const renewal_id = parseInt(req.params.renewal_id);
+
+  try {
+    const renewalCheck = await pool.query('SELECT renewal_id, renewal_document FROM CONTRACT_RENEWALS WHERE renewal_id = $1', [renewal_id]);
+
+    if (!renewalCheck.rowCount) {
+      return res.status(404).json({
+        success: false,
+        message: 'Renovación no encontrada',
+      });
+    }
+
+    const renewal_document = renewalCheck.rows[0].renewal_document;
+
+    if (!renewal_document) {
+      return res.status(400).json({
+        success: false,
+        message: 'La renovación no tiene documento asociado',
+      });
+    }
+
+    // Eliminar el archivo de Azure
+    const deleteResult = await azureDeleteBlob({
+      blobname: renewal_document,
+      containerName: 'contract-renewals',
+    });
+
+    if (!deleteResult.success) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error al eliminar el archivo de almacenamiento',
+      });
+    }
+
+    // Actualizar la renovación para quitar la referencia al documento
+    await pool.query('UPDATE CONTRACT_RENEWALS SET renewal_document = NULL WHERE renewal_id = $1', [renewal_id]);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Archivo de renovación eliminado correctamente',
     });
   } catch (error: any) {
     next(error);
