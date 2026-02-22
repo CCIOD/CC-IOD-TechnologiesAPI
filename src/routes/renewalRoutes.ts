@@ -1,18 +1,16 @@
-import { Router } from "express";
+import { Router } from 'express';
 import {
   createRenewal,
   updateRenewal,
   deleteRenewal,
+  deleteRenewalFile,
   getRenewalsByClient,
   getRenewalById,
   getAllRenewals,
-} from "../controllers/renewalController";
-import { authenticateToken } from "../middlewares/authenticateToken";
-import {
-  validationCreateRenewal,
-  validationUpdateRenewal,
-} from "../middlewares/validationMiddlewares";
-import { uploadRenewalFile } from "../middlewares/uploadFiles";
+} from '../controllers/renewalController';
+import { authenticateToken } from '../middlewares/authenticateToken';
+import { validationCreateRenewal, validationUpdateRenewal } from '../middlewares/validationMiddlewares';
+import { uploadRenewalFile } from '../middlewares/uploadFiles';
 
 const router = Router();
 
@@ -24,21 +22,21 @@ router.use(authenticateToken);
  * @desc    Obtener todas las renovaciones (admin)
  * @access  Private
  */
-router.get("/", getAllRenewals);
+router.get('/', getAllRenewals);
 
 /**
  * @route   GET /api/renewals/client/:client_id
  * @desc    Obtener todas las renovaciones de un cliente
  * @access  Private
  */
-router.get("/client/:client_id", getRenewalsByClient);
+router.get('/client/:client_id', getRenewalsByClient);
 
 /**
  * @route   GET /api/renewals/:renewal_id
  * @desc    Obtener una renovación específica
  * @access  Private
  */
-router.get("/:renewal_id", getRenewalById);
+router.get('/:renewal_id', getRenewalById);
 
 /**
  * @route   POST /api/renewals
@@ -47,12 +45,7 @@ router.get("/:renewal_id", getRenewalById);
  * @body    { client_id, renewal_date, renewal_duration?, notes? }
  * @file    renewal_document (opcional)
  */
-router.post(
-  "/",
-  uploadRenewalFile,
-  validationCreateRenewal,
-  createRenewal
-);
+router.post('/', uploadRenewalFile, validationCreateRenewal, createRenewal);
 
 /**
  * @route   PUT /api/renewals/:renewal_id
@@ -61,18 +54,20 @@ router.post(
  * @body    { renewal_date?, renewal_duration?, notes? }
  * @file    renewal_document (opcional)
  */
-router.put(
-  "/:renewal_id",
-  uploadRenewalFile,
-  validationUpdateRenewal,
-  updateRenewal
-);
+router.put('/:renewal_id', uploadRenewalFile, validationUpdateRenewal, updateRenewal);
 
 /**
  * @route   DELETE /api/renewals/:renewal_id
  * @desc    Eliminar una renovación
  * @access  Private
  */
-router.delete("/:renewal_id", deleteRenewal);
+router.delete('/:renewal_id', deleteRenewal);
+
+/**
+ * @route   DELETE /api/renewals/:renewal_id/file
+ * @desc    Eliminar solo el archivo de una renovación
+ * @access  Private
+ */
+router.delete('/:renewal_id/file', deleteRenewalFile);
 
 export default router;
