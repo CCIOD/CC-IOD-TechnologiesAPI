@@ -28,11 +28,15 @@ export const getClientPaymentPlans = asyncHandler(async (req: Request, res: Resp
         CASE
           WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL
             THEN cr.renewal_date
+          WHEN cpp.contract_type = 'original'
+            THEN COALESCE(c.placement_date, c.contract_date, cpp.contract_start_date)
           ELSE cpp.contract_start_date
         END as "fechaInicio",
         CASE
           WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL AND cr.renewal_duration IS NOT NULL
             THEN (cr.renewal_date + (CAST(regexp_replace(cr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER) * INTERVAL '1 month'))::date
+          WHEN cpp.contract_type = 'original' AND c.contract_duration IS NOT NULL
+            THEN (COALESCE(c.placement_date, c.contract_date) + (CAST(regexp_replace(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) * INTERVAL '1 month'))::date
           ELSE cpp.contract_end_date
         END as "fechaFin",
         cpp.contract_amount as "montoContrato",
@@ -45,6 +49,7 @@ export const getClientPaymentPlans = asyncHandler(async (req: Request, res: Resp
         cpp.updated_at as "fechaActualizacion"
       FROM CONTRACT_PAYMENT_PLANS cpp
       LEFT JOIN CONTRACT_RENEWALS cr ON cpp.renewal_id = cr.renewal_id AND cpp.contract_type = 'renewal'
+      LEFT JOIN CLIENTS c ON cpp.client_id = c.client_id AND cpp.contract_type = 'original'
       WHERE cpp.client_id = $1
       ORDER BY 
         CASE WHEN cpp.contract_type = 'original' THEN 0 ELSE 1 END,
@@ -91,11 +96,15 @@ export const getPaymentPlanDetails = asyncHandler(async (req: Request, res: Resp
         CASE
           WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL
             THEN cr.renewal_date
+          WHEN cpp.contract_type = 'original'
+            THEN COALESCE(c.placement_date, c.contract_date, cpp.contract_start_date)
           ELSE cpp.contract_start_date
         END as "fechaInicio",
         CASE
           WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL AND cr.renewal_duration IS NOT NULL
             THEN (cr.renewal_date + (CAST(regexp_replace(cr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER) * INTERVAL '1 month'))::date
+          WHEN cpp.contract_type = 'original' AND c.contract_duration IS NOT NULL
+            THEN (COALESCE(c.placement_date, c.contract_date) + (CAST(regexp_replace(c.contract_duration, '[^0-9]', '', 'g') AS INTEGER) * INTERVAL '1 month'))::date
           ELSE cpp.contract_end_date
         END as "fechaFin",
         cpp.contract_amount as "montoContrato",
@@ -108,6 +117,7 @@ export const getPaymentPlanDetails = asyncHandler(async (req: Request, res: Resp
         cpp.updated_at as "fechaActualizacion"
       FROM CONTRACT_PAYMENT_PLANS cpp
       LEFT JOIN CONTRACT_RENEWALS cr ON cpp.renewal_id = cr.renewal_id AND cpp.contract_type = 'renewal'
+      LEFT JOIN CLIENTS c ON cpp.client_id = c.client_id AND cpp.contract_type = 'original'
       WHERE cpp.plan_id = $1
     `;
 
