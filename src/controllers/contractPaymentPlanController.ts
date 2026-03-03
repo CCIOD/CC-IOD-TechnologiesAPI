@@ -20,26 +20,35 @@ export const getClientPaymentPlans = asyncHandler(async (req: Request, res: Resp
   try {
     const query = `
       SELECT 
-        plan_id as id,
-        client_id as "clienteId",
-        contract_id as "contractoId",
-        contract_type as "tipoContrato",
-        renewal_id as "renovacionId",
-        contract_start_date as "fechaInicio",
-        contract_end_date as "fechaFin",
-        contract_amount as "montoContrato",
-        payment_frequency as "frecuenciaPago",
-        total_scheduled_amount as "totalProgramado",
-        total_paid_amount as "totalPagado",
-        total_pending_amount as "totalPendiente",
-        status as estado,
-        created_at as "fechaCreacion",
-        updated_at as "fechaActualizacion"
-      FROM CONTRACT_PAYMENT_PLANS
-      WHERE client_id = $1
+        cpp.plan_id as id,
+        cpp.client_id as "clienteId",
+        cpp.contract_id as "contractoId",
+        cpp.contract_type as "tipoContrato",
+        cpp.renewal_id as "renovacionId",
+        CASE
+          WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL
+            THEN cr.renewal_date
+          ELSE cpp.contract_start_date
+        END as "fechaInicio",
+        CASE
+          WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL AND cr.renewal_duration IS NOT NULL
+            THEN (cr.renewal_date + (CAST(regexp_replace(cr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER) * INTERVAL '1 month'))::date
+          ELSE cpp.contract_end_date
+        END as "fechaFin",
+        cpp.contract_amount as "montoContrato",
+        cpp.payment_frequency as "frecuenciaPago",
+        cpp.total_scheduled_amount as "totalProgramado",
+        cpp.total_paid_amount as "totalPagado",
+        cpp.total_pending_amount as "totalPendiente",
+        cpp.status as estado,
+        cpp.created_at as "fechaCreacion",
+        cpp.updated_at as "fechaActualizacion"
+      FROM CONTRACT_PAYMENT_PLANS cpp
+      LEFT JOIN CONTRACT_RENEWALS cr ON cpp.renewal_id = cr.renewal_id AND cpp.contract_type = 'renewal'
+      WHERE cpp.client_id = $1
       ORDER BY 
-        CASE WHEN contract_type = 'original' THEN 0 ELSE 1 END,
-        contract_start_date DESC
+        CASE WHEN cpp.contract_type = 'original' THEN 0 ELSE 1 END,
+        "fechaInicio" DESC
     `;
 
     const result = await pool.query(query, [client_id]);
@@ -74,23 +83,32 @@ export const getPaymentPlanDetails = asyncHandler(async (req: Request, res: Resp
     // Obtener información del plan
     const planQuery = `
       SELECT 
-        plan_id as id,
-        client_id as "clienteId",
-        contract_id as "contractoId",
-        contract_type as "tipoContrato",
-        renewal_id as "renovacionId",
-        contract_start_date as "fechaInicio",
-        contract_end_date as "fechaFin",
-        contract_amount as "montoContrato",
-        payment_frequency as "frecuenciaPago",
-        total_scheduled_amount as "totalProgramado",
-        total_paid_amount as "totalPagado",
-        total_pending_amount as "totalPendiente",
-        status as estado,
-        created_at as "fechaCreacion",
-        updated_at as "fechaActualizacion"
-      FROM CONTRACT_PAYMENT_PLANS
-      WHERE plan_id = $1
+        cpp.plan_id as id,
+        cpp.client_id as "clienteId",
+        cpp.contract_id as "contractoId",
+        cpp.contract_type as "tipoContrato",
+        cpp.renewal_id as "renovacionId",
+        CASE
+          WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL
+            THEN cr.renewal_date
+          ELSE cpp.contract_start_date
+        END as "fechaInicio",
+        CASE
+          WHEN cpp.contract_type = 'renewal' AND cr.renewal_date IS NOT NULL AND cr.renewal_duration IS NOT NULL
+            THEN (cr.renewal_date + (CAST(regexp_replace(cr.renewal_duration, '[^0-9]', '', 'g') AS INTEGER) * INTERVAL '1 month'))::date
+          ELSE cpp.contract_end_date
+        END as "fechaFin",
+        cpp.contract_amount as "montoContrato",
+        cpp.payment_frequency as "frecuenciaPago",
+        cpp.total_scheduled_amount as "totalProgramado",
+        cpp.total_paid_amount as "totalPagado",
+        cpp.total_pending_amount as "totalPendiente",
+        cpp.status as estado,
+        cpp.created_at as "fechaCreacion",
+        cpp.updated_at as "fechaActualizacion"
+      FROM CONTRACT_PAYMENT_PLANS cpp
+      LEFT JOIN CONTRACT_RENEWALS cr ON cpp.renewal_id = cr.renewal_id AND cpp.contract_type = 'renewal'
+      WHERE cpp.plan_id = $1
     `;
 
     const planResult = await pool.query(planQuery, [plan_id]);
@@ -459,7 +477,7 @@ export const updatePlanPayment = asyncHandler(async (req: Request, res: Response
         updated_at = NOW()
       WHERE plan_id = $1
     `,
-      [plan_id]
+      [plan_id],
     );
 
     logSuccess('✅ Payment updated', {
@@ -512,7 +530,7 @@ export const deletePlanPayment = asyncHandler(async (req: Request, res: Response
         updated_at = NOW()
       WHERE plan_id = $1
     `,
-      [plan_id]
+      [plan_id],
     );
 
     logSuccess('✅ Payment deleted', {

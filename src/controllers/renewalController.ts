@@ -317,7 +317,8 @@ export const updateRenewal = async (req: Request, res: Response, next: NextFunct
         if (updatedRenewal.renewal_date && updatedRenewal.renewal_duration) {
           const startDate = new Date(updatedRenewal.renewal_date);
           const months = parseInt(updatedRenewal.renewal_duration) || 0;
-          const endDate = new Date(startDate.setMonth(startDate.getMonth() + months));
+          const endDate = new Date(startDate);
+          endDate.setUTCMonth(endDate.getUTCMonth() + months);
           contractEndDate = endDate.toISOString().split('T')[0];
         }
 
@@ -338,7 +339,7 @@ export const updateRenewal = async (req: Request, res: Response, next: NextFunct
           `REN_${renewal_id}_${Date.now()}`,
           'renewal',
           renewal_id,
-          updatedRenewal.renewal_date ? new Date(updatedRenewal.renewal_date).toISOString().split('T')[0] : null,
+          updatedRenewal.renewal_date || null,
           contractEndDate,
           amount,
           paymentFrequencyToUse,
