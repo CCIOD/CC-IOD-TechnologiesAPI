@@ -169,21 +169,22 @@ export const getDashboardSummary = async (req: Request, res: Response, next: Nex
     const ultimosPagosResult = await pool.query(ultimosPagosQuery);
     const ultimosPagos = ultimosPagosResult.rows;
 
-    // 10. Clientes con mayor adeudo
+    // 10. Clientes con pagos vencidos (todos, ordenados por adeudo)
     const clientesMayorAdeudoQuery = `
       SELECT 
         c.client_id as id,
         c.defendant_name as nombre,
         c.contract_number as "numeroContrato",
+        COUNT(*) as "pagosVencidos",
         COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) as adeudo
       FROM CLIENTS c
-      LEFT JOIN CONTRACT_PLAN_PAYMENTS p ON c.client_id = p.client_id 
-        AND p.payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+      INNER JOIN CONTRACT_PLAN_PAYMENTS p ON c.client_id = p.client_id
       WHERE c.status NOT IN ('Cancelado', 'Desinstalado')
+        AND p.payment_status IN ('Pendiente', 'Vencido', 'Parcial')
+        AND p.scheduled_date < CURRENT_DATE
       GROUP BY c.client_id, c.defendant_name, c.contract_number
-      HAVING COALESCE(SUM(p.scheduled_amount - COALESCE(p.paid_amount, 0)), 0) > 0
+      HAVING COUNT(*) > 0
       ORDER BY adeudo DESC
-      LIMIT 5
     `;
     const clientesMayorAdeudoResult = await pool.query(clientesMayorAdeudoQuery);
     const clientesMayorAdeudo = clientesMayorAdeudoResult.rows;
