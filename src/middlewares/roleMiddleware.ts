@@ -34,12 +34,13 @@ export const checkRole = (allowedRoles: number[]) => {
  * Roles permitidos:
  * - 1: Admin (acceso total)
  * - 2: Director (acceso total a administración)
+ * - 3: Administrativo (acceso a administración)
  * - 4: Seguimiento (acceso a administración)
  *
  * Roles NO permitidos:
- * - 3: Administrativo (sin acceso a administración)
+ * - Cualquier rol fuera de [1, 2, 3, 4]
  */
-export const checkAdministrationAccess = checkRole([1, 2, 4]);
+export const checkAdministrationAccess = checkRole([1, 2, 3, 4]);
 
 /**
  * Middleware para verificar si es Admin

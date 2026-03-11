@@ -31,8 +31,7 @@ const router = Router();
 // All routes require authentication
 router.use(authenticateToken);
 
-// Only Admin (1), Director (2), and Seguimiento (4) can access administration module
-// Administrativo (3) is NOT allowed
+// Roles with administration access: Admin (1), Director (2), Administrativo (3), Seguimiento (4)
 router.use(checkAdministrationAccess);
 
 // ==================== DASHBOARD ====================
