@@ -7,20 +7,21 @@ import { NextFunction, Request, Response } from 'express';
 export const checkRole = (allowedRoles: number[]) => {
   return (req: Request, res: Response, next: NextFunction) => {
     const user = (req as any).user;
+    const userRole = Number(user?.role);
 
-    if (!user || !user.role) {
+    if (!user || Number.isNaN(userRole)) {
       return res.status(401).json({
         success: false,
         message: 'No autorizado. Usuario no autenticado.',
       });
     }
 
-    if (!allowedRoles.includes(user.role)) {
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: 'Acceso denegado. No tienes permisos para acceder a este recurso.',
         requiredRoles: allowedRoles,
-        yourRole: user.role,
+        yourRole: userRole,
       });
     }
 
@@ -38,7 +39,7 @@ export const checkRole = (allowedRoles: number[]) => {
  * Roles NO permitidos:
  * - 3: Administrativo (sin acceso a administración)
  */
-export const checkAdministrationAccess = checkRole([1, 2, 3]);
+export const checkAdministrationAccess = checkRole([1, 2, 4]);
 
 /**
  * Middleware para verificar si es Admin
