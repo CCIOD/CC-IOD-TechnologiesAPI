@@ -213,33 +213,35 @@ npm test -- --coverage
 
 ```env
 # Servidor
-PORT=3001
+PORT=<port>
 NODE_ENV=development
 
-# Base de datos
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=cciod_db
-DB_USER=postgres
-DB_PASSWORD=password
+# Base de datos (PostgreSQL)
+PGHOST=<host>
+PGPORT=<port>
+PGDATABASE=<database_name>
+PGUSER=<user>
+PGPASSWORD=<password>
 
 # JWT
-JWT_SECRET=your_secret_key
+JWT_SECRET=<secret>
 JWT_EXPIRATION=24h
 
 # Azure Storage
-AZURE_STORAGE_CONNECTION_STRING=...
-AZURE_CONTAINER_NAME=...
+AZURE_STORAGE_CONNECTION_STRING=<connection_string>
+AZURE_CONTAINER_NAME=<container_name>
 
 # Email
-SMTP_HOST=...
-SMTP_PORT=...
-SMTP_USER=...
-SMTP_PASSWORD=...
+SMTP_HOST=<host>
+SMTP_PORT=<port>
+SMTP_USER=<user>
+SMTP_PASSWORD=<password>
 
 # CORS
-CORS_ORIGIN=http://localhost:3000
+CORS_ORIGIN=<frontend_origin>
 ```
+
+> ⚠️ Nunca subir el archivo `.env` al repositorio. Usar `.env.template` como referencia.
 
 ## 🔄 Flujos de Trabajo
 
@@ -321,11 +323,6 @@ Los logs incluyen:
 ## 📝 Licencia
 
 ISC
-
-## 👤 Autor
-
-**jcarlosmariscal**
-- Christian Sánchez (Actualizaciones 2025)
 
 ## 📞 Contacto
 
