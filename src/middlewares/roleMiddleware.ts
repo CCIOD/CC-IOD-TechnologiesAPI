@@ -65,3 +65,34 @@ export const checkStaffAccess = checkRole([1, 2, 3]);
  * Roles: 1 (Admin), 2 (Director), 4 (Seguimiento)
  */
 export const checkAccountingAccess = checkRole([1, 2, 4]);
+
+/**
+ * Middleware para verificar si el usuario es Monitorista.
+ * Solo role_id = 6
+ */
+export const checkMonitorista = checkRole([6]);
+
+/**
+ * Middleware para verificar acceso al módulo de monitoreo
+ * (Alertas, Bitácora, Reportes Semanales, Protocolos).
+ * Roles: 1 (Admin), 2 (Director), 6 (Monitorista)
+ */
+export const checkMonitoringAccess = checkRole([1, 2, 6]);
+
+/**
+ * Catálogo de role_ids del sistema (referencia única):
+ * - 1: Admin
+ * - 2: Director
+ * - 3: Administrativo
+ * - 4: Seguimiento
+ * - 5: Contador
+ * - 6: Monitorista
+ */
+export const ROLE_IDS = {
+  ADMIN: 1,
+  DIRECTOR: 2,
+  ADMINISTRATIVO: 3,
+  SEGUIMIENTO: 4,
+  CONTADOR: 5,
+  MONITORISTA: 6,
+} as const;

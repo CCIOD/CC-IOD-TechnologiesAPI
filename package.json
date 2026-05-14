@@ -7,13 +7,17 @@
     "dev": "tsnd --respawn --clear src/server.ts",
     "build": "rimraf ./dist && tsc",
     "start": "node dist/server.js",
-    "setup:azure": "tsnd scripts/setup-azure-containers.ts"
+    "setup:azure": "tsnd scripts/setup-azure-containers.ts",
+    "smoke": "tsnd scripts/smoke-test.ts"
   },
   "author": "jcarlosmariscal",
   "license": "ISC",
   "dependencies": {
     "@azure/storage-blob": "^12.23.0",
     "@joi/date": "^2.1.1",
+    "@simplewebauthn/server": "^11.0.0",
+    "@types/pdfkit": "^0.17.6",
+    "axios": "^1.16.0",
     "bcrypt": "^5.1.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -24,6 +28,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.13",
+    "pdfkit": "^0.18.0",
     "pg": "^8.11.5",
     "typescript": "^5.4.5"
   },

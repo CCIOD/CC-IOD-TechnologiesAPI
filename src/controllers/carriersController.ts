@@ -8,21 +8,23 @@ export const getAllCarriers = async (
 ): Promise<Response | void> => {
   try {
     const query = `
-      SELECT 
-        carrier_id as id, 
-        residence_area, 
-        A.placement_date as carrier_placement_date, 
-        placement_time, 
-        electronic_bracelet, 
-        beacon, 
-        wireless_charger, 
-        information_emails, 
-        A.contact_numbers as carrier_contact_numbers, 
-        A.house_arrest, 
-        A.installer_name, 
-        A.observations as carrier_observations, 
-        A.client_id, 
+      SELECT
+        carrier_id as id,
+        residence_area,
+        A.placement_date as carrier_placement_date,
+        placement_time,
+        electronic_bracelet,
+        beacon,
+        wireless_charger,
+        information_emails,
+        A.contact_numbers as carrier_contact_numbers,
+        A.house_arrest,
+        A.installer_name,
+        A.observations as carrier_observations,
+        A.client_id,
         A.relationship,
+        A.authority_whatsapp,
+        A.authority_email,
         B.defendant_name as name,
         B.contract_number,
         B.criminal_case,
@@ -117,6 +119,8 @@ export const createCarrier = async (
     observations,
     client_id,
     relationship,
+    authority_whatsapp,
+    authority_email,
   } = req.body;
   try {
     const obserOptional = observations ? observations : "";
@@ -148,27 +152,30 @@ export const createCarrier = async (
       text: `
         WITH inserted AS (
           INSERT INTO CARRIERS (
-            residence_area, placement_date, placement_time, electronic_bracelet, 
-            beacon, wireless_charger, information_emails, contact_numbers, 
-            house_arrest, installer_name, observations, client_id, relationship
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) 
+            residence_area, placement_date, placement_time, electronic_bracelet,
+            beacon, wireless_charger, information_emails, contact_numbers,
+            house_arrest, installer_name, observations, client_id, relationship,
+            authority_whatsapp, authority_email
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
           RETURNING *
-        ) 
-        SELECT 
-          A.carrier_id AS id, 
-          A.residence_area, 
-          A.placement_date, 
-          A.placement_time, 
-          A.electronic_bracelet, 
-          A.beacon, 
-          A.wireless_charger, 
-          A.information_emails, 
-          A.contact_numbers, 
-          A.house_arrest, 
-          A.installer_name, 
-          A.observations, 
-          A.client_id, 
-          A.relationship, 
+        )
+        SELECT
+          A.carrier_id AS id,
+          A.residence_area,
+          A.placement_date,
+          A.placement_time,
+          A.electronic_bracelet,
+          A.beacon,
+          A.wireless_charger,
+          A.information_emails,
+          A.contact_numbers,
+          A.house_arrest,
+          A.installer_name,
+          A.observations,
+          A.client_id,
+          A.relationship,
+          A.authority_whatsapp,
+          A.authority_email,
           B.defendant_name AS name,
           B.contract_number,
           B.criminal_case,
@@ -200,6 +207,8 @@ export const createCarrier = async (
         obserOptional,
         client_id,
         relationship || 'Familiar',
+        authority_whatsapp || null,
+        authority_email || null,
       ],
     };
     const result = await pool.query(query);
@@ -308,6 +317,8 @@ export const updateCarrier = async (
     installer_name,
     observations,
     relationship,
+    authority_whatsapp,
+    authority_email,
   } = req.body;
   try {
     const obserOptional = observations ? observations : "";
@@ -317,32 +328,35 @@ export const updateCarrier = async (
     const query = {
       text: `
         WITH updated AS (
-          UPDATE CARRIERS CA SET 
-            residence_area=$1, placement_date=$2, placement_time=$3, 
-            electronic_bracelet=$4, beacon=$5, wireless_charger=$6, 
-            information_emails=$7, contact_numbers=$8, house_arrest=$9, 
-            installer_name=$10, observations=$11, relationship=$12 
-          WHERE carrier_id=$13 
-          RETURNING carrier_id, residence_area, placement_date, placement_time, 
-                   electronic_bracelet, beacon, wireless_charger, information_emails, 
-                   contact_numbers, house_arrest, installer_name, observations, 
-                   relationship, client_id
+          UPDATE CARRIERS CA SET
+            residence_area=$1, placement_date=$2, placement_time=$3,
+            electronic_bracelet=$4, beacon=$5, wireless_charger=$6,
+            information_emails=$7, contact_numbers=$8, house_arrest=$9,
+            installer_name=$10, observations=$11, relationship=$12,
+            authority_whatsapp=$13, authority_email=$14
+          WHERE carrier_id=$15
+          RETURNING carrier_id, residence_area, placement_date, placement_time,
+                   electronic_bracelet, beacon, wireless_charger, information_emails,
+                   contact_numbers, house_arrest, installer_name, observations,
+                   relationship, client_id, authority_whatsapp, authority_email
         )
-        SELECT 
-          A.carrier_id AS id, 
-          A.residence_area, 
-          A.placement_date, 
-          A.placement_time, 
-          A.electronic_bracelet, 
-          A.beacon, 
-          A.wireless_charger, 
-          A.information_emails, 
-          A.contact_numbers, 
-          A.house_arrest, 
-          A.installer_name, 
-          A.observations, 
-          A.client_id, 
-          A.relationship, 
+        SELECT
+          A.carrier_id AS id,
+          A.residence_area,
+          A.placement_date,
+          A.placement_time,
+          A.electronic_bracelet,
+          A.beacon,
+          A.wireless_charger,
+          A.information_emails,
+          A.contact_numbers,
+          A.house_arrest,
+          A.installer_name,
+          A.observations,
+          A.client_id,
+          A.relationship,
+          A.authority_whatsapp,
+          A.authority_email,
           B.defendant_name AS name,
           B.contract_number,
           B.criminal_case,
@@ -373,6 +387,8 @@ export const updateCarrier = async (
         installer_name,
         obserOptional,
         relationship || 'Familiar',
+        authority_whatsapp || null,
+        authority_email || null,
         carrier_id,
       ],
     };

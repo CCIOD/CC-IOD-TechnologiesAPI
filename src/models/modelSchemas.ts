@@ -148,6 +148,14 @@ export const carrierSchema = Joi.object({
     req: 'Debe haber un cliente a la cuál definir como portador.',
   }),
   relationship: Joi.string().max(100).optional().allow(null, ''),
+  authority_whatsapp: Joi.string().trim().max(50).optional().allow('', null).messages({
+    'string.base': 'El WhatsApp de la autoridad debe ser texto.',
+    'string.max': 'El WhatsApp de la autoridad no puede exceder 50 caracteres.',
+  }),
+  authority_email: Joi.string().trim().email().max(255).optional().allow('', null).messages({
+    'string.email': 'El correo de la autoridad no es válido.',
+    'string.max': 'El correo de la autoridad no puede exceder 255 caracteres.',
+  }),
 });
 
 // --------------- AUTH ------------------------------
@@ -475,5 +483,154 @@ export const paymentParamsSchema = Joi.object({
     'number.positive': 'El ID del pago debe ser positivo',
     'any.required': 'El ID del pago es requerido',
   }),
+});
+
+// =============================================================================
+// ALERT PROTOCOLS — plantillas Handlebars
+// =============================================================================
+
+const protocolMessageTemplate = Joi.string().trim().min(5).max(2000).messages({
+  'string.empty': 'El mensaje de la plantilla no puede estar vacío.',
+  'string.min': 'La plantilla debe tener al menos 5 caracteres.',
+  'string.max': 'La plantilla no puede exceder 2000 caracteres.',
+});
+
+export const createAlertProtocolSchema = Joi.object({
+  alert_type: Joi.string().trim().min(2).max(80).required().messages({
+    'any.required': 'El tipo de alerta es obligatorio.',
+    'string.empty': 'El tipo de alerta no puede estar vacío.',
+  }),
+  label: Joi.string().trim().min(3).max(120).required().messages({
+    'any.required': 'La etiqueta es obligatoria.',
+  }),
+  message_template: protocolMessageTemplate.required(),
+  is_active: Joi.boolean().optional().default(true),
+});
+
+export const updateAlertProtocolSchema = Joi.object({
+  alert_type: Joi.string().trim().min(2).max(80).optional(),
+  label: Joi.string().trim().min(3).max(120).optional(),
+  message_template: protocolMessageTemplate.optional(),
+  is_active: Joi.boolean().optional(),
+})
+  .min(1)
+  .messages({ 'object.min': 'Debe proporcionar al menos un campo para actualizar.' });
+
+// =============================================================================
+// ALERTS
+// =============================================================================
+
+/**
+ * Campos que el cliente NO puede setear nunca: el server los maneja.
+ * Si llegan en el body se rechaza con 400 (políticas estrictas de la fase 2).
+ */
+const forbiddenAlertFields = {
+  description: Joi.any().forbidden().messages({
+    'any.unknown': 'El campo "description" no es válido. El mensaje se genera automáticamente.',
+  }),
+  generated_message: Joi.any().forbidden().messages({
+    'any.unknown': 'El mensaje generado no se puede setear manualmente.',
+  }),
+  activated_at: Joi.any().forbidden().messages({
+    'any.unknown': 'La fecha de activación la asigna el servidor.',
+  }),
+  activated_by: Joi.any().forbidden().messages({
+    'any.unknown': 'El usuario que activa la alerta lo asigna el servidor.',
+  }),
+  deactivated_at: Joi.any().forbidden().messages({
+    'any.unknown': 'La fecha de desactivación la asigna el servidor.',
+  }),
+  deactivated_by: Joi.any().forbidden().messages({
+    'any.unknown': 'El usuario que desactiva la alerta lo asigna el servidor.',
+  }),
+  reported_to_authority: Joi.any().forbidden(),
+  reported_at: Joi.any().forbidden(),
+  reported_by: Joi.any().forbidden(),
+  locked: Joi.any().forbidden(),
+  status: Joi.any().forbidden().messages({
+    'any.unknown': 'El estado se cambia con /alerts/:id/deactivate, no en el body.',
+  }),
+};
+
+// Valores permitidos para el estado de la correa.
+export const CORREA_STATES = ['Conectada', 'Desconectada'] as const;
+
+const correaValidation = Joi.string()
+  .trim()
+  .valid(...CORREA_STATES)
+  .optional()
+  .allow('', null)
+  .messages({
+    'any.only': `El estado de correa debe ser ${CORREA_STATES.join(' o ')}.`,
+  });
+
+export const createAlertSchema = Joi.object({
+  alert_type: Joi.string().trim().min(2).max(80).required().messages({
+    'any.required': 'El tipo de alerta es obligatorio.',
+  }),
+  carrier_id: Joi.number().integer().positive().optional().allow(null),
+  client_id: Joi.number().integer().positive().optional().allow(null),
+  zona_inclusion: Joi.string().trim().max(255).optional().allow('', null),
+  zona_exclusion: Joi.string().trim().max(255).optional().allow('', null),
+  house_arrest: Joi.string().trim().max(255).optional().allow('', null),
+  correa: correaValidation,
+  info_operativa: Joi.string().trim().max(2000).optional().allow('', null),
+  ...forbiddenAlertFields,
+});
+
+/**
+ * Solo permite los 5 campos editables pre-reporte.
+ */
+export const updateAlertSchema = Joi.object({
+  zona_inclusion: Joi.string().trim().max(255).optional().allow('', null),
+  zona_exclusion: Joi.string().trim().max(255).optional().allow('', null),
+  house_arrest: Joi.string().trim().max(255).optional().allow('', null),
+  correa: correaValidation,
+  info_operativa: Joi.string().trim().max(2000).optional().allow('', null),
+  ...forbiddenAlertFields,
+  alert_type: Joi.any().forbidden().messages({
+    'any.unknown': 'El tipo de alerta no se puede modificar después de la creación.',
+  }),
+  carrier_id: Joi.any().forbidden(),
+  client_id: Joi.any().forbidden(),
+})
+  .min(1)
+  .messages({ 'object.min': 'Debe proporcionar al menos un campo para actualizar.' });
+
+export const alertIdParamsSchema = Joi.object({
+  id: Joi.number().integer().positive().required().messages({
+    'any.required': 'El ID de la alerta es requerido.',
+    'number.base': 'El ID de la alerta debe ser un número.',
+  }),
+});
+
+// =============================================================================
+// WEEKLY REPORTS
+// =============================================================================
+
+export const generateWeeklyReportSchema = Joi.object({
+  carrier_id: Joi.number().integer().positive().required().messages({
+    'any.required': 'Debe seleccionar un portador.',
+    'number.base': 'El ID del portador debe ser un número.',
+  }),
+  period_from: Joi.date().iso().required().messages({
+    'any.required': 'period_from es obligatorio (ISO YYYY-MM-DD).',
+    'date.base': 'period_from debe ser una fecha válida.',
+    'date.isoDate': 'period_from debe estar en formato ISO (YYYY-MM-DD).',
+  }),
+  period_to: Joi.date().iso().min(Joi.ref('period_from')).required().messages({
+    'any.required': 'period_to es obligatorio.',
+    'date.min': 'period_to debe ser igual o posterior a period_from.',
+  }),
+  title: Joi.string().trim().max(180).optional().allow('', null),
+  summary: Joi.string().trim().max(2000).optional().allow('', null),
+  state_code: Joi.string().trim().max(10).optional().allow('', null),
+  report_type: Joi.string()
+    .valid('full', 'reported-only')
+    .optional()
+    .default('full')
+    .messages({
+      'any.only': 'report_type debe ser "full" o "reported-only".',
+    }),
 });
 // 107
