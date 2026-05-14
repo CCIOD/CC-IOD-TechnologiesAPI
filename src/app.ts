@@ -12,6 +12,11 @@ import administrationRoutes from './routes/administrationRoutes';
 import renewalRoutes from './routes/renewalRoutes';
 import prosecutorDocsRoutes from './routes/prosecutorDocsRoutes';
 import paymentsRoutes from './routes/paymentsRoutes';
+import accessControlRoutes from './routes/accessControlRoutes';
+import alertsRoutes from './routes/alertsRoutes';
+import alertProtocolsRoutes from './routes/alertProtocolsRoutes';
+import weeklyReportsRoutes from './routes/weeklyReportsRoutes';
+import operationsDocsRoutes from './routes/operationsDocsRoutes';
 import cors from 'cors';
 import path from 'path';
 import { requestLoggingMiddleware } from './middlewares/loggingMiddleware';
@@ -32,6 +37,8 @@ app.use(
   express.json({
     limit: '50mb',
     verify: (req: any, res, buf, encoding) => {
+      // Permitir POST/PUT/DELETE sin body. Solo validamos si hay payload.
+      if (!buf || buf.length === 0) return;
       try {
         JSON.parse(buf.toString());
       } catch (e) {
@@ -100,6 +107,10 @@ app.get('/api/info', (req, res) => {
       '/renewals',
       '/prosecutor-docs',
       '/pagos',
+      '/access-control',
+      '/alerts',
+      '/alert-protocols',
+      '/weekly-reports',
     ],
   });
 });
@@ -118,6 +129,16 @@ app.use('/administration', administrationRoutes);
 app.use('/renewals', renewalRoutes);
 app.use('/prosecutor-docs', prosecutorDocsRoutes);
 app.use('/pagos', paymentsRoutes);
+app.use('/access-control', accessControlRoutes);
+app.use('/control-acceso', accessControlRoutes); // Alias en español
+app.use('/alerts', alertsRoutes);
+app.use('/alertas', alertsRoutes); // Alias en español
+app.use('/alert-protocols', alertProtocolsRoutes);
+app.use('/protocolos-alerta', alertProtocolsRoutes); // Alias en español
+app.use('/weekly-reports', weeklyReportsRoutes);
+app.use('/reportes-semanales', weeklyReportsRoutes); // Alias en español
+app.use('/operations-docs', operationsDocsRoutes);
+app.use('/documentos', operationsDocsRoutes); // Alias en español
 
 // 404 handler
 app.use('*', (req, res) => {

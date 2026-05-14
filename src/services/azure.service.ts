@@ -159,9 +159,20 @@ export const azureUploadBlob = async ({ blob, containerName, folderPath }: IAzur
 
     // Subir archivo con timeout, reintentos y validación
     console.log(`[Azure Upload] Iniciando subida del archivo: ${blobName}`);
+    // Para que el navegador previsualice PDFs/imagenes en lugar de descargarlos,
+    // fijamos Content-Type explícito y Content-Disposition: inline.
+    const inlineMimes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
+    const blobHTTPHeaders = inlineMimes.includes(blob.mimetype)
+      ? {
+          blobContentType: blob.mimetype,
+          blobContentDisposition: `inline; filename="${sanitizedFileName}"`,
+        }
+      : { blobContentType: blob.mimetype };
     try {
       await retryOperation(async () => {
-        const uploadPromise = blockBlobClient.upload(blob.buffer, blob.size);
+        const uploadPromise = blockBlobClient.upload(blob.buffer, blob.size, {
+          blobHTTPHeaders,
+        });
         const timeoutPromise = new Promise<never>(
           (_, reject) => setTimeout(() => reject(new Error('Timeout en la subida')), 120000), // 2 minutos
         );

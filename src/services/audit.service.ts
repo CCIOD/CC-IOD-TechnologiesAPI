@@ -161,7 +161,7 @@ export const logMultipleFieldChanges = async (
   user_agent?: string
 ): Promise<void> => {
   try {
-    const promises = changes.map(change => 
+    const promises = changes.map(change =>
       logClientChange({
         client_id,
         user_id,
@@ -174,9 +174,168 @@ export const logMultipleFieldChanges = async (
         user_agent,
       })
     );
-    
+
     await Promise.all(promises);
   } catch (error) {
     console.error('Error logging multiple field changes:', error);
   }
+};
+
+// =============================================================================
+// Bitácora de alertas (centro de monitoreo)
+// =============================================================================
+
+export type AlertActionType =
+  | 'CREATE'
+  | 'UPDATE'
+  | 'DEACTIVATE'
+  | 'REPORT'
+  | 'REPORT_UPDATE';
+
+export interface AlertAuditEntry {
+  alert_id: number;
+  user_id: number;
+  user_name?: string;
+  action_type: AlertActionType;
+  field_name?: string;
+  old_value?: string;
+  new_value?: string;
+  ip_address?: string;
+  user_agent?: string;
+}
+
+/**
+ * Registra una entrada en la bitácora de alertas.
+ * No lanza errores: si falla, lo loggea pero no interrumpe la operación principal.
+ */
+export const logAlertEvent = async (entry: AlertAuditEntry): Promise<void> => {
+  try {
+    const query = {
+      text: `INSERT INTO ALERT_AUDIT_LOG
+             (alert_id, user_id, user_name, action_type, field_name, old_value, new_value, ip_address, user_agent)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      values: [
+        entry.alert_id,
+        entry.user_id,
+        entry.user_name || null,
+        entry.action_type,
+        entry.field_name || null,
+        entry.old_value || null,
+        entry.new_value || null,
+        entry.ip_address || null,
+        entry.user_agent || null,
+      ],
+    };
+    await pool.query(query);
+  } catch (error) {
+    console.error('Error logging alert event:', error);
+  }
+};
+
+/**
+ * Registra múltiples cambios de campos de una alerta en una sola operación.
+ */
+export const logMultipleAlertFieldChanges = async (
+  alert_id: number,
+  user_id: number,
+  user_name: string,
+  changes: { field_name: string; old_value: string; new_value: string }[],
+  ip_address?: string,
+  user_agent?: string
+): Promise<void> => {
+  try {
+    await Promise.all(
+      changes.map((change) =>
+        logAlertEvent({
+          alert_id,
+          user_id,
+          user_name,
+          action_type: 'UPDATE',
+          field_name: change.field_name,
+          old_value: change.old_value,
+          new_value: change.new_value,
+          ip_address,
+          user_agent,
+        }),
+      ),
+    );
+  } catch (error) {
+    console.error('Error logging multiple alert field changes:', error);
+  }
+};
+
+// =============================================================================
+// Bitácora de accesos al sistema
+// =============================================================================
+
+export type AuthMethod = 'password' | 'pin' | 'webauthn';
+export type AccessOutcome =
+  | 'success'
+  | 'denied_password'
+  | 'denied_pin'
+  | 'denied_ip'
+  | 'denied_device'
+  | 'denied_user'
+  | 'denied_webauthn';
+
+export interface AccessAttemptEntry {
+  user_id?: number | null;
+  email?: string | null;
+  ip_address?: string | null;
+  device_token?: string | null;
+  user_agent?: string | null;
+  method: AuthMethod;
+  outcome: AccessOutcome;
+  failure_reason?: string | null;
+}
+
+/**
+ * Registra un intento de acceso al sistema (exitoso o denegado).
+ * Es append-only y nunca lanza errores.
+ */
+export const logAccessAttempt = async (
+  entry: AccessAttemptEntry,
+): Promise<void> => {
+  try {
+    const query = {
+      text: `INSERT INTO ACCESS_ATTEMPTS
+             (user_id, email, ip_address, device_token, user_agent, method, outcome, failure_reason)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      values: [
+        entry.user_id ?? null,
+        entry.email ?? null,
+        entry.ip_address ?? null,
+        entry.device_token ?? null,
+        entry.user_agent ?? null,
+        entry.method,
+        entry.outcome,
+        entry.failure_reason ?? null,
+      ],
+    };
+    await pool.query(query);
+  } catch (error) {
+    console.error('Error logging access attempt:', error);
+  }
+};
+
+/**
+ * Atajo para registrar un login exitoso o denegado con metadatos del request.
+ */
+export const logAuthEvent = async (
+  req: { headers: Record<string, any>; clientIp?: string },
+  data: Omit<AccessAttemptEntry, 'ip_address' | 'user_agent' | 'device_token'> & {
+    device_token?: string | null;
+  },
+): Promise<void> => {
+  const ip_address =
+    req.clientIp ||
+    (typeof req.headers['x-forwarded-for'] === 'string'
+      ? req.headers['x-forwarded-for'].split(',')[0].trim()
+      : null) ||
+    (req.headers['x-real-ip'] as string | undefined) ||
+    null;
+  const user_agent = (req.headers['user-agent'] as string | undefined) || null;
+  const device_token =
+    data.device_token ?? (req.headers['x-device-id'] as string | undefined) ?? null;
+  await logAccessAttempt({ ...data, ip_address, user_agent, device_token });
 };

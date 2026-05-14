@@ -9,6 +9,11 @@ import {
   updateRenewalSchema,
   createProsecutorDocSchema,
   updateProsecutorDocSchema,
+  createAlertProtocolSchema,
+  updateAlertProtocolSchema,
+  createAlertSchema,
+  updateAlertSchema,
+  generateWeeklyReportSchema,
 } from '../models/modelSchemas';
 
 const messageArrValues = (message: string): string => {
@@ -123,6 +128,50 @@ export const validationUpdateProsecutorDoc = (req: Request, res: Response, next:
   if (error) {
     const message = messageArrValues(error.details[0].message);
     return res.status(400).json({ success: false, message });
+  }
+  next();
+};
+
+// =============================================================================
+// Alertas y plantillas
+// =============================================================================
+
+export const validationCreateAlertProtocol = (req: Request, res: Response, next: NextFunction) => {
+  const { error } = createAlertProtocolSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: messageArrValues(error.details[0].message) });
+  }
+  next();
+};
+
+export const validationUpdateAlertProtocol = (req: Request, res: Response, next: NextFunction) => {
+  const { error } = updateAlertProtocolSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: messageArrValues(error.details[0].message) });
+  }
+  next();
+};
+
+export const validationCreateAlert = (req: Request, res: Response, next: NextFunction) => {
+  const { error } = createAlertSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: messageArrValues(error.details[0].message) });
+  }
+  next();
+};
+
+export const validationUpdateAlert = (req: Request, res: Response, next: NextFunction) => {
+  const { error } = updateAlertSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: messageArrValues(error.details[0].message) });
+  }
+  next();
+};
+
+export const validationGenerateWeeklyReport = (req: Request, res: Response, next: NextFunction) => {
+  const { error } = generateWeeklyReportSchema.validate(req.body);
+  if (error) {
+    return res.status(400).json({ success: false, message: messageArrValues(error.details[0].message) });
   }
   next();
 };

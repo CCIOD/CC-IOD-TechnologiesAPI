@@ -9,7 +9,11 @@ const REQUIRED_CONTAINERS = [
   "reports",
   "carrier-acts",
   "contract-renewals",
-  "prosecutor-documents"
+  "prosecutor-documents",
+  "weekly-reports",
+  "alert-reports",
+  "signatures",
+  "operations-docs"
 ];
 
 async function ensureAllContainersExist() {
