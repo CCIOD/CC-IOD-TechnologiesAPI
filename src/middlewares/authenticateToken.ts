@@ -32,8 +32,9 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     const user = decoded as JwtPayload;
     const route = req.baseUrl;
 
-    // Solo administradores (role 1) tienen acceso a /users y /carriers
-    if (user.role !== 1 && (route === '/users' || route === '/carriers')) {
+    // Solo administradores (role 1) tienen acceso a /users.
+    // /carriers se restringe a nivel de ruta (lectura abierta, mutaciones solo Admin).
+    if (user.role !== 1 && route === '/users') {
       return res.status(403).json(UNAUTHORIZED);
     }
 

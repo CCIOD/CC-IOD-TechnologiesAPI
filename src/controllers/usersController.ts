@@ -26,9 +26,10 @@ export const createUser = async (req: Request, res: Response, next: NextFunction
       return res.status(404).json({
         message: 'Para crear el usuario defina su rol.',
       });
-    if (parseInt(role_id) !== 2 && parseInt(role_id) !== 3 && parseInt(role_id) !== 4)
+    const parsedRoleId = parseInt(role_id);
+    if (parsedRoleId !== 2 && parsedRoleId !== 3 && parsedRoleId !== 4 && parsedRoleId !== 6)
       return res.status(404).json({
-        message: 'Seleccione el rol de Director, Administrativo o Seguimiento.',
+        message: 'Seleccione el rol de Director, Administrativo, Seguimiento o Monitorista.',
         role_id,
       });
     const hashedPassword = await hashPassword(password);

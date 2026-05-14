@@ -119,9 +119,9 @@ export const observationsValidation = {
 };
 
 export const roleIdValidation = {
-  role_id: Joi.number().valid(2, 3, 4).integer().optional().messages({
+  role_id: Joi.number().valid(2, 3, 4, 6).integer().optional().messages({
     'number.base': 'El rol debe ser un número.',
-    'any.only': 'El rol debe ser Director, Administrativo o Seguimiento',
+    'any.only': 'El rol debe ser Director, Administrativo, Seguimiento o Monitorista',
     'number.integer': 'El rol debe ser un número entero.',
   }),
 };
